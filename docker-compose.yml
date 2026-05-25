@@ -94,6 +94,28 @@ services:
     networks:
       - devnet
 
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: pi-dozzle
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9999:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - devnet
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: pi-uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - ./data/uptime-kuma:/app/data
+    networks:
+      - devnet
+
 networks:
   devnet:
     name: pi-dev-stack
