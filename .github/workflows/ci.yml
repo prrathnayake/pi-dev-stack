@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  compose-config:
+    name: Validate Compose config
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create test env
+        run: cp .env.example .env
+
+      - name: Validate docker compose config
+        run: docker compose config
+
+      - name: Check shell scripts syntax
+        run: |
+          bash -n setup.sh
+          bash -n tunnel.sh
+          bash -n validate.sh
+
+  smoke-test-core:
+    name: Smoke test core containers
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create test env
+        run: cp .env.example .env
+
+      - name: Start lightweight dependencies
+        run: docker compose up -d postgres redis
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            if docker exec pi-postgres pg_isready -U dev -d n8n; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs postgres
+          exit 1
+
+      - name: Check Redis
+        run: docker exec pi-redis redis-cli ping | grep PONG
+
+      - name: Start n8n
+        run: docker compose up -d n8n
+
+      - name: Wait for n8n HTTP
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:5678/ >/dev/null; then
+              exit 0
+            fi
+            sleep 3
+          done
+          docker compose logs n8n
+          exit 1
+
+      - name: Show container status
+        if: always()
+        run: docker compose ps
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+  tunnel-binary-check:
+    name: Check cloudflared binary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install cloudflared
+        run: |
+          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
+          sudo dpkg -i cloudflared.deb
+          cloudflared --version
