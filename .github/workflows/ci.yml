@@ -31,7 +31,7 @@ jobs:
   smoke-test-core:
     name: Smoke test core containers
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,20 +59,44 @@ jobs:
       - name: Start n8n
         run: docker compose up -d n8n
 
-      - name: Wait for n8n HTTP
+      - name: Wait for n8n process
         run: |
-          for i in {1..60}; do
-            if curl -fsS http://127.0.0.1:5678/ >/dev/null; then
+          for i in {1..90}; do
+            STATUS=$(docker inspect -f '{{.State.Status}}' pi-n8n || true)
+            if [ "$STATUS" = "running" ]; then
+              echo "n8n container is running"
               exit 0
             fi
-            sleep 3
+            docker compose ps
+            sleep 2
           done
           docker compose logs n8n
+          exit 1
+
+      - name: Wait for n8n HTTP readiness
+        run: |
+          for i in {1..120}; do
+            CODE=$(curl -sS -o /tmp/n8n-response.txt -w "%{http_code}" http://127.0.0.1:5678/ || true)
+            if [ "$CODE" = "200" ] || [ "$CODE" = "302" ] || [ "$CODE" = "404" ]; then
+              echo "n8n responded with HTTP $CODE"
+              exit 0
+            fi
+            echo "Attempt $i: n8n not ready yet. HTTP=$CODE"
+            docker compose ps n8n
+            sleep 3
+          done
+          echo "n8n did not become HTTP-ready"
+          docker compose logs n8n
+          cat /tmp/n8n-response.txt || true
           exit 1
 
       - name: Show container status
         if: always()
         run: docker compose ps
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
 
       - name: Cleanup
         if: always()
