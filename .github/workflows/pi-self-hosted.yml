@@ -1,0 +1,74 @@
+name: Raspberry Pi Full Stack Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  full-pi-test:
+    runs-on: [self-hosted, linux, arm64]
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create environment
+        run: cp .env.example .env
+
+      - name: Ensure scripts executable
+        run: |
+          chmod +x setup.sh
+          chmod +x tunnel.sh
+          chmod +x validate.sh
+
+      - name: Validate compose
+        run: docker compose config
+
+      - name: Start full stack
+        run: docker compose up -d
+
+      - name: Wait for services
+        run: |
+          sleep 40
+          docker compose ps
+
+      - name: Test PostgreSQL
+        run: docker exec pi-postgres pg_isready -U dev -d n8n
+
+      - name: Test Redis
+        run: docker exec pi-redis redis-cli ping | grep PONG
+
+      - name: Test n8n
+        run: curl -I http://127.0.0.1:5678
+
+      - name: Test Ollama
+        run: curl http://127.0.0.1:11434/api/tags
+
+      - name: Test Open WebUI
+        run: curl -I http://127.0.0.1:3000
+
+      - name: Test Portainer
+        run: curl -I http://127.0.0.1:9000
+
+      - name: Start tunnels
+        run: |
+          nohup ./tunnel.sh > tunnel-test.log 2>&1 &
+          sleep 20
+
+      - name: Verify Cloudflare URLs generated
+        run: |
+          grep trycloudflare logs/n8n.log
+          grep trycloudflare logs/open-webui.log
+          grep trycloudflare logs/portainer.log
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          docker compose logs
+          cat logs/n8n.log || true
+          cat logs/open-webui.log || true
+          cat logs/portainer.log || true
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans
