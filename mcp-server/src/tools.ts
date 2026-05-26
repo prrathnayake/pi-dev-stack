@@ -16,25 +16,29 @@ const ModelSchema = z.object({ model: z.string().min(1).max(120).regex(/^[a-zA-Z
 const BackupPruneSchema = z.object({ days: z.number().int().min(1).max(365).default(7) });
 const TunnelSchema = z.object({ group: z.string().min(1).max(50).regex(/^[a-zA-Z0-9_-]+$/).default("core") });
 
+function withJson(args: string[]): string[] {
+  return [...args, "--json"];
+}
+
 export function createTools(config: RuntimeConfig, run: CommandRunner): ToolDef[] {
   return [
     {
       name: "homelab_status",
       description: "Show Docker Compose service status for the Pi Dev Stack.",
       inputSchema: EmptySchema,
-      handler: async () => formatResult(await run(["status"])),
+      handler: async () => formatResult(await run(withJson(["status"]))),
     },
     {
       name: "homelab_doctor",
       description: "Run homelab diagnostics for Docker, Compose, cloudflared, Tailscale, disk, memory, temperature, and containers.",
       inputSchema: EmptySchema,
-      handler: async () => formatResult(await run(["doctor"])),
+      handler: async () => formatResult(await run(withJson(["doctor"]))),
     },
     {
       name: "homelab_list_services",
       description: "List services known to the Pi Dev Stack CLI.",
       inputSchema: EmptySchema,
-      handler: async () => formatResult(await run(["service", "list"])),
+      handler: async () => formatResult(await run(withJson(["service", "list"]))),
     },
     {
       name: "homelab_get_service_logs",
@@ -51,37 +55,37 @@ export function createTools(config: RuntimeConfig, run: CommandRunner): ToolDef[
       name: "homelab_get_urls",
       description: "Show saved Cloudflare tunnel URLs from local state.",
       inputSchema: EmptySchema,
-      handler: async () => formatResult(await run(["urls"])),
+      handler: async () => formatResult(await run(withJson(["urls"]))),
     },
     {
       name: "homelab_security_check",
       description: "Run safe security checks for default secrets, port binding, and Docker socket mounts.",
       inputSchema: EmptySchema,
-      handler: async () => formatResult(await run(["security", "check"])),
+      handler: async () => formatResult(await run(withJson(["security", "check"]))),
     },
     {
       name: "homelab_system_info",
       description: "Show operating system, architecture, kernel, and current user information.",
       inputSchema: EmptySchema,
-      handler: async () => formatResult(await run(["system-info"])),
+      handler: async () => formatResult(await run(withJson(["system-info"]))),
     },
     {
       name: "homelab_list_models",
       description: "List local Ollama models through the Ollama API.",
       inputSchema: EmptySchema,
-      handler: async () => formatResult(await run(["model", "list"])),
+      handler: async () => formatResult(await run(withJson(["model", "list"]))),
     },
     {
       name: "homelab_recommend_models",
       description: "Show recommended small Ollama models for Raspberry Pi.",
       inputSchema: EmptySchema,
-      handler: async () => formatResult(await run(["model", "recommend"])),
+      handler: async () => formatResult(await run(withJson(["model", "recommend"]))),
     },
     {
       name: "homelab_list_backups",
       description: "List local homelab backup archives.",
       inputSchema: EmptySchema,
-      handler: async () => formatResult(await run(["backup", "list"])),
+      handler: async () => formatResult(await run(withJson(["backup", "list"]))),
     },
     {
       name: "homelab_start_service",
