@@ -142,6 +142,22 @@ services:
     networks:
       - devnet
 
+  novnc:
+    image: theasp/novnc:latest
+    container_name: pi-novnc
+    restart: unless-stopped
+    environment:
+      DISPLAY_WIDTH: ${NOVNC_WIDTH:-1280}
+      DISPLAY_HEIGHT: ${NOVNC_HEIGHT:-720}
+      RUN_XTERM: "no"
+    ports:
+      - "127.0.0.1:6080:8080"
+    command: ["--vnc", "host.docker.internal:5900"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - devnet
+
 networks:
   devnet:
     name: pi-dev-stack
