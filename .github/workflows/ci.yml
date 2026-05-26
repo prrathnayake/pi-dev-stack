@@ -27,6 +27,18 @@ jobs:
           bash -n setup.sh
           bash -n tunnel.sh
           bash -n validate.sh
+          bash -n stop.sh
+          bash -n pi-stack
+          bash -n homelab
+
+      - name: Ensure executables
+        run: chmod +x setup.sh stop.sh tunnel.sh validate.sh pi-stack homelab
+
+      - name: Test homelab help
+        run: |
+          ./homelab invalid-command || true
+          ./homelab status || true
+          ./homelab doctor || true
 
   smoke-test-core:
     name: Smoke test core containers
@@ -89,6 +101,13 @@ jobs:
           docker compose logs n8n
           cat /tmp/n8n-response.txt || true
           exit 1
+
+      - name: Test homelab commands against live stack
+        run: |
+          chmod +x homelab pi-stack
+          ./homelab status || true
+          ./homelab doctor || true
+          ./homelab urls || true
 
       - name: Show container status
         if: always()
