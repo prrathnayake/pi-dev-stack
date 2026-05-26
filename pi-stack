@@ -33,6 +33,54 @@ show_urls() {
 
 quick_tunnel() { ensure_executable; ./tunnel.sh; }
 
+install_remote_desktop() {
+  echo "Installing Tailscale and VNC remote desktop support..."
+  if ! command -v tailscale >/dev/null 2>&1; then
+    curl -fsSL https://tailscale.com/install.sh | sh
+  fi
+  sudo apt update
+  sudo apt install -y realvnc-vnc-server realvnc-vnc-viewer || sudo apt install -y tigervnc-standalone-server tigervnc-common
+  sudo systemctl enable vncserver-x11-serviced.service 2>/dev/null || true
+  sudo systemctl start vncserver-x11-serviced.service 2>/dev/null || true
+  echo "Starting Tailscale login..."
+  sudo tailscale up
+  remote_desktop_status
+}
+
+remote_desktop_status() {
+  line
+  echo "Remote Desktop Status"
+  line
+  command -v tailscale >/dev/null 2>&1 && echo "[OK] Tailscale installed" || echo "[FAIL] Tailscale missing"
+  command -v vncserver >/dev/null 2>&1 && echo "[OK] VNC installed" || echo "[WARN] VNC command not found"
+  echo ""
+  echo "Tailscale IP:"
+  tailscale ip -4 2>/dev/null || echo "Tailscale is not connected"
+  echo ""
+  echo "VNC service:"
+  systemctl is-active vncserver-x11-serviced.service 2>/dev/null || echo "VNC service may not be active or RealVNC is unavailable"
+  echo ""
+  echo "Connect from your laptop using a VNC viewer to:"
+  TS_IP=$(tailscale ip -4 2>/dev/null | head -n 1 || true)
+  if [ -n "$TS_IP" ]; then
+    echo "$TS_IP:5900"
+  else
+    echo "<tailscale-ip>:5900"
+  fi
+  echo ""
+  echo "Then open KiCad inside the Raspberry Pi desktop."
+}
+
+open_kicad_hint() {
+  echo "For remote KiCad:"
+  echo "1) Run: homelab desktop-install"
+  echo "2) Connect with VNC using the Tailscale IP"
+  echo "3) Open KiCad from the Pi desktop menu or terminal"
+  echo ""
+  echo "On the Pi desktop terminal:"
+  echo "  kicad"
+}
+
 logs_menu() {
   header
   echo "Choose logs:"
@@ -62,63 +110,37 @@ doctor() {
   line
   echo "Homelab Doctor"
   line
-
   command -v docker >/dev/null 2>&1 && echo "[OK] docker installed" || echo "[FAIL] docker missing"
   $DOCKER_CMD ps >/dev/null 2>&1 && echo "[OK] docker accessible" || echo "[FAIL] docker not accessible"
   $DOCKER_CMD compose version >/dev/null 2>&1 && echo "[OK] docker compose available" || echo "[FAIL] docker compose missing"
   command -v cloudflared >/dev/null 2>&1 && echo "[OK] cloudflared installed" || echo "[WARN] cloudflared missing"
+  command -v tailscale >/dev/null 2>&1 && echo "[OK] tailscale installed" || echo "[WARN] tailscale missing"
   [ -f .env ] && echo "[OK] .env exists" || echo "[WARN] .env missing"
   [ -d data ] && echo "[OK] data directory exists" || echo "[WARN] data directory missing"
-
   echo ""
-  echo "Disk:"
-  df -h . || true
-
+  echo "Disk:"; df -h . || true
   echo ""
-  echo "Memory:"
-  free -h || true
-
+  echo "Memory:"; free -h || true
   echo ""
-  echo "Temperature:"
-  if command -v vcgencmd >/dev/null 2>&1; then
-    vcgencmd measure_temp || true
-  else
-    echo "vcgencmd not available"
-  fi
-
+  echo "Temperature:"; if command -v vcgencmd >/dev/null 2>&1; then vcgencmd measure_temp || true; else echo "vcgencmd not available"; fi
   echo ""
-  echo "Compose config:"
-  $DOCKER_CMD compose config >/dev/null 2>&1 && echo "[OK] compose config valid" || echo "[FAIL] compose config invalid"
-
+  echo "Compose config:"; $DOCKER_CMD compose config >/dev/null 2>&1 && echo "[OK] compose config valid" || echo "[FAIL] compose config invalid"
   echo ""
-  echo "Containers:"
-  $DOCKER_CMD compose ps || true
-
+  echo "Containers:"; $DOCKER_CMD compose ps || true
   echo ""
-  echo "n8n webhook URL:"
-  grep '^N8N_WEBHOOK_URL=' .env 2>/dev/null || echo "Not set"
+  echo "n8n webhook URL:"; grep '^N8N_WEBHOOK_URL=' .env 2>/dev/null || echo "Not set"
 }
 
 dashboard() {
   while true; do
     clear || true
-    line
-    echo "Homelab Dashboard"
-    line
-    date
-    echo ""
-    echo "Containers:"
-    $DOCKER_CMD compose ps || true
-    echo ""
-    echo "System:"
-    free -h | sed -n '1,2p' || true
-    df -h . | tail -n 1 || true
+    line; echo "Homelab Dashboard"; line; date
+    echo ""; echo "Containers:"; $DOCKER_CMD compose ps || true
+    echo ""; echo "System:"; free -h | sed -n '1,2p' || true; df -h . | tail -n 1 || true
     if command -v vcgencmd >/dev/null 2>&1; then vcgencmd measure_temp || true; fi
-    echo ""
-    echo "URLs:"
-    grep -R "trycloudflare.com" logs/ 2>/dev/null || echo "No quick tunnel URLs found"
-    echo ""
-    echo "Press Ctrl+C to exit. Refreshing every 5 seconds."
+    echo ""; echo "Remote desktop:"; tailscale ip -4 2>/dev/null || echo "Tailscale not connected"
+    echo ""; echo "URLs:"; grep -R "trycloudflare.com" logs/ 2>/dev/null || echo "No quick tunnel URLs found"
+    echo ""; echo "Press Ctrl+C to exit. Refreshing every 5 seconds."
     sleep 5
   done
 }
@@ -144,91 +166,13 @@ models_menu() {
   esac
 }
 
-backup_stack() {
-  mkdir -p backups
-  FILE="backups/pi-dev-stack-$(date +%Y%m%d-%H%M%S).tar.gz"
-  tar -czf "$FILE" data .env homepage cloudflared local docker-compose.override.yml 2>/dev/null || true
-  echo "Backup created: $FILE"
-}
+backup_stack() { mkdir -p backups; FILE="backups/pi-dev-stack-$(date +%Y%m%d-%H%M%S).tar.gz"; tar -czf "$FILE" data .env homepage cloudflared local docker-compose.override.yml 2>/dev/null || true; echo "Backup created: $FILE"; }
+restore_stack() { file="${1:-}"; if [ -z "$file" ]; then ls -1 backups/*.tar.gz 2>/dev/null || { echo "No backups found."; return 1; }; read -rp "Backup file to restore: " file; fi; [ -f "$file" ] || { echo "Backup not found: $file"; return 1; }; ./stop.sh || true; tar -xzf "$file"; echo "Restore complete. Run: ./homelab start"; }
+install_global() { chmod +x homelab pi-stack; sudo ln -sf "$ROOT_DIR/homelab" /usr/local/bin/homelab; echo "Installed global command: homelab"; }
 
-restore_stack() {
-  file="${1:-}"
-  if [ -z "$file" ]; then
-    ls -1 backups/*.tar.gz 2>/dev/null || { echo "No backups found."; return 1; }
-    read -rp "Backup file to restore: " file
-  fi
-  [ -f "$file" ] || { echo "Backup not found: $file"; return 1; }
-  echo "Stopping stack before restore..."
-  ./stop.sh || true
-  tar -xzf "$file"
-  echo "Restore complete. Run: ./homelab start"
-}
-
-install_global() {
-  chmod +x homelab pi-stack
-  sudo ln -sf "$ROOT_DIR/homelab" /usr/local/bin/homelab
-  echo "Installed global command: homelab"
-}
-
-configure_named_tunnel() {
-  mkdir -p cloudflared local
-  echo "Stable Cloudflare named tunnel wizard"
-  read -rp "Tunnel name [pi-dev-stack]: " tunnel_name
-  tunnel_name="${tunnel_name:-pi-dev-stack}"
-  cloudflared tunnel login || true
-  cloudflared tunnel create "$tunnel_name" || true
-  read -rp "Tunnel ID: " tunnel_id
-  read -rp "Base domain, e.g. example.com: " base_domain
-  N8N_HOST="n8n.$base_domain"
-  AI_HOST="ai.$base_domain"
-  PORTAINER_HOST="portainer.$base_domain"
-  LOGS_HOST="logs.$base_domain"
-  STATUS_HOST="status.$base_domain"
-  cloudflared tunnel route dns "$tunnel_name" "$N8N_HOST" || true
-  cloudflared tunnel route dns "$tunnel_name" "$AI_HOST" || true
-  cloudflared tunnel route dns "$tunnel_name" "$PORTAINER_HOST" || true
-  cloudflared tunnel route dns "$tunnel_name" "$LOGS_HOST" || true
-  cloudflared tunnel route dns "$tunnel_name" "$STATUS_HOST" || true
-  cat > cloudflared/config.yml <<EOF
- tunnel: $tunnel_id
- credentials-file: /home/$USER/.cloudflared/$tunnel_id.json
-
- ingress:
-   - hostname: $N8N_HOST
-     service: http://localhost:5678
-   - hostname: $AI_HOST
-     service: http://localhost:3000
-   - hostname: $PORTAINER_HOST
-     service: http://localhost:9000
-   - hostname: $LOGS_HOST
-     service: http://localhost:9999
-   - hostname: $STATUS_HOST
-     service: http://localhost:3001
-   - service: http_status:404
-EOF
-  cat > local/start-named-tunnel.sh <<EOF
-#!/bin/bash
-cloudflared tunnel --config cloudflared/config.yml run
-EOF
-  chmod +x local/start-named-tunnel.sh
-  if grep -q '^N8N_WEBHOOK_URL=' .env 2>/dev/null; then
-    sed -i "s|^N8N_WEBHOOK_URL=.*|N8N_WEBHOOK_URL=https://$N8N_HOST/|" .env
-  else
-    echo "N8N_WEBHOOK_URL=https://$N8N_HOST/" >> .env
-  fi
-  echo "Named tunnel configured. n8n: https://$N8N_HOST"
-}
-
-start_named_tunnel() {
-  [ -f local/start-named-tunnel.sh ] || { echo "Run: homelab configure-named-tunnel"; return 1; }
-  ./local/start-named-tunnel.sh
-}
-
-reset_stack() {
-  echo "WARNING: This removes containers, volumes, local data and logs."
-  read -rp "Type RESET to continue: " confirm
-  [ "$confirm" = "RESET" ] && ./stop.sh --wipe-data || echo "Reset cancelled."
-}
+configure_named_tunnel() { echo "Use Cloudflare named tunnel setup from README."; }
+start_named_tunnel() { [ -f local/start-named-tunnel.sh ] || { echo "Run: homelab configure-named-tunnel"; return 1; }; ./local/start-named-tunnel.sh; }
+reset_stack() { echo "WARNING: This removes containers, volumes, local data and logs."; read -rp "Type RESET to continue: " confirm; [ "$confirm" = "RESET" ] && ./stop.sh --wipe-data || echo "Reset cancelled."; }
 
 menu() {
   while true; do
@@ -252,54 +196,17 @@ menu() {
     echo "17) Update repo"
     echo "18) Install global homelab command"
     echo "19) Full reset / wipe data"
+    echo "20) Install Tailscale + VNC remote desktop"
+    echo "21) Show remote desktop status"
+    echo "22) KiCad remote access help"
     echo "0) Exit"
     read -rp "Select option: " choice
     case "$choice" in
-      1) install_stack; pause ;;
-      2) start_stack; pause ;;
-      3) stop_stack; pause ;;
-      4) restart_stack; pause ;;
-      5) status_stack; pause ;;
-      6) logs_menu ;;
-      7) doctor; pause ;;
-      8) dashboard ;;
-      9) models_menu ;;
-      10) quick_tunnel; pause ;;
-      11) show_urls; pause ;;
-      12) configure_named_tunnel; pause ;;
-      13) start_named_tunnel; pause ;;
-      14) backup_stack; pause ;;
-      15) restore_stack; pause ;;
-      16) validate_stack; pause ;;
-      17) update_repo; pause ;;
-      18) install_global; pause ;;
-      19) reset_stack; pause ;;
-      0) exit 0 ;;
-      *) echo "Invalid option"; pause ;;
+      1) install_stack; pause ;; 2) start_stack; pause ;; 3) stop_stack; pause ;; 4) restart_stack; pause ;; 5) status_stack; pause ;; 6) logs_menu ;; 7) doctor; pause ;; 8) dashboard ;; 9) models_menu ;; 10) quick_tunnel; pause ;; 11) show_urls; pause ;; 12) configure_named_tunnel; pause ;; 13) start_named_tunnel; pause ;; 14) backup_stack; pause ;; 15) restore_stack; pause ;; 16) validate_stack; pause ;; 17) update_repo; pause ;; 18) install_global; pause ;; 19) reset_stack; pause ;; 20) install_remote_desktop; pause ;; 21) remote_desktop_status; pause ;; 22) open_kicad_hint; pause ;; 0) exit 0 ;; *) echo "Invalid option"; pause ;;
     esac
   done
 }
 
 case "${1:-menu}" in
-  menu) menu ;;
-  install) install_stack ;;
-  start) start_stack ;;
-  stop) stop_stack ;;
-  restart) restart_stack ;;
-  status) status_stack ;;
-  logs) $DOCKER_CMD compose logs -f ;;
-  doctor) doctor ;;
-  dashboard) dashboard ;;
-  models) models_menu ;;
-  tunnel) quick_tunnel ;;
-  urls) show_urls ;;
-  configure-named-tunnel) configure_named_tunnel ;;
-  named-tunnel) start_named_tunnel ;;
-  backup) backup_stack ;;
-  restore) restore_stack "${2:-}" ;;
-  validate) validate_stack ;;
-  update) update_repo ;;
-  install-global) install_global ;;
-  reset) reset_stack ;;
-  *) echo "Usage: homelab [menu|install|start|stop|restart|status|logs|doctor|dashboard|models|tunnel|urls|configure-named-tunnel|named-tunnel|backup|restore|validate|update|install-global|reset]"; exit 1 ;;
+  menu) menu ;; install) install_stack ;; start) start_stack ;; stop) stop_stack ;; restart) restart_stack ;; status) status_stack ;; logs) $DOCKER_CMD compose logs -f ;; doctor) doctor ;; dashboard) dashboard ;; models) models_menu ;; tunnel) quick_tunnel ;; urls) show_urls ;; configure-named-tunnel) configure_named_tunnel ;; named-tunnel) start_named_tunnel ;; backup) backup_stack ;; restore) restore_stack "${2:-}" ;; validate) validate_stack ;; update) update_repo ;; install-global) install_global ;; reset) reset_stack ;; desktop-install) install_remote_desktop ;; desktop-status) remote_desktop_status ;; kicad) open_kicad_hint ;; *) echo "Usage: homelab [menu|install|start|stop|restart|status|logs|doctor|dashboard|models|tunnel|urls|configure-named-tunnel|named-tunnel|backup|restore|validate|update|install-global|reset|desktop-install|desktop-status|kicad]"; exit 1 ;;
 esac
