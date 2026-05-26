@@ -51,6 +51,12 @@ jobs:
       - name: Create test env
         run: cp .env.example .env
 
+      - name: Prepare writable data directories
+        run: |
+          mkdir -p data/postgres data/redis data/n8n data/ollama data/open-webui data/portainer data/uptime-kuma
+          sudo chown -R 1000:1000 data/n8n
+          sudo chown -R 999:999 data/postgres data/redis || true
+
       - name: Start lightweight dependencies
         run: docker compose up -d postgres redis
 
@@ -87,6 +93,7 @@ jobs:
 
       - name: Wait for n8n HTTP readiness
         run: |
+          touch /tmp/n8n-response.txt
           for i in {1..120}; do
             CODE=$(curl -sS -o /tmp/n8n-response.txt -w "%{http_code}" http://127.0.0.1:5678/ || true)
             if [ "$CODE" = "200" ] || [ "$CODE" = "302" ] || [ "$CODE" = "404" ]; then
