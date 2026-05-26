@@ -17,6 +17,22 @@ Run validation:
 ./homelab validate
 ```
 
+## MCP server development
+
+```bash
+cd mcp-server
+npm install
+npm run build
+npm test
+```
+
+Keep the MCP server safe by default:
+
+- do not expose arbitrary shell commands
+- validate all user input before calling `homelab`
+- keep destructive actions disabled unless explicitly gated
+- do not expose `.env`, secret inspection, restore, reset, or service shell tools
+
 ## Important rules
 
 Do not store secrets in Git.
@@ -51,6 +67,8 @@ CI validates:
 - shell scripts
 - Docker Compose config
 - homelab CLI
+- MCP server TypeScript build
+- MCP server unit tests
 - PostgreSQL
 - Redis
 - n8n startup

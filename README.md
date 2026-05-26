@@ -10,6 +10,7 @@ This repository gives you:
 
 - Docker Compose based service orchestration
 - interactive `homelab` CLI
+- MCP server for AI-assisted homelab inspection and safe operations
 - AI runtime with Ollama
 - browser AI interface with Open WebUI
 - workflow automation with n8n
@@ -37,7 +38,8 @@ homelab CLI
   ├── Tailscale + VNC remote desktop
   ├── backup / restore tools
   ├── local runtime state
-  └── diagnostics / dashboard
+  ├── diagnostics / dashboard
+  └── MCP server for AI clients
 ```
 
 Core tracked files stay updateable through Git. Runtime-generated data is stored in ignored local folders.
@@ -46,6 +48,7 @@ See:
 
 ```text
 docs/ARCHITECTURE.md
+docs/MCP_SERVER.md
 ```
 
 ## Included Services
@@ -131,7 +134,38 @@ If you get permission errors:
 
 ```bash
 cd ~/Desktop/Projects/pi-dev-stack
-chmod +x homelab pi-stack setup.sh stop.sh tunnel.sh validate.sh
+chmod +x homelab pi-stack setup.sh tunnel.sh validate.sh stop.sh
+```
+
+## MCP Server
+
+This repo includes a TypeScript MCP server under:
+
+```text
+mcp-server/
+```
+
+It lets AI clients safely inspect and operate the homelab through allowlisted `homelab` commands.
+
+Install and test:
+
+```bash
+cd mcp-server
+npm install
+npm run build
+npm test
+```
+
+Default mode is read-only:
+
+```bash
+PI_DEV_STACK_ROOT=/path/to/pi-dev-stack node mcp-server/dist/index.js
+```
+
+See:
+
+```text
+docs/MCP_SERVER.md
 ```
 
 ## Homelab CLI Commands
@@ -492,6 +526,7 @@ GitHub Actions validates:
 - Docker Compose config
 - shell script syntax
 - `homelab` CLI syntax
+- MCP server TypeScript build and unit tests
 - PostgreSQL startup
 - Redis startup
 - n8n startup
@@ -524,6 +559,7 @@ Contributor principles:
 - Keep `.env` private.
 - Never commit Cloudflare credentials.
 - Use named tunnels for stable production URLs.
+- Keep the MCP server read-only unless you intentionally enable write capabilities.
 
 ## Recommended Next Improvements
 
