@@ -37,6 +37,68 @@ This project is designed for a Raspberry Pi 5 homelab/cyberdeck setup using Dock
 |---|---|
 | cloudflared | Temporary public HTTPS URLs using trycloudflare.com |
 
+## Local Customization Without Git Conflicts
+
+Do not modify tracked infrastructure files directly:
+
+- docker-compose.yml
+- setup.sh
+- tunnel.sh
+- validate.sh
+- stop.sh
+
+Instead use local override files.
+
+### Git-safe local files
+
+These paths are ignored by Git:
+
+```text
+.env
+.env.local
+local/
+data/
+logs/
+homepage/
+docker-compose.override.yml
+```
+
+This prevents future `git pull` conflicts.
+
+### Local Docker overrides
+
+Create:
+
+```bash
+cp docker-compose.override.example.yml docker-compose.override.yml
+```
+
+Docker Compose automatically loads it.
+
+Example:
+
+```yaml
+services:
+  open-webui:
+    environment:
+      WEBUI_NAME: Pasan AI Lab
+```
+
+### Local scripts
+
+Store custom scripts inside:
+
+```text
+local/
+```
+
+Example:
+
+```text
+local/custom-backup.sh
+local/custom-tunnels.sh
+```
+
 ## Recommended Hardware
 
 - Raspberry Pi 5
