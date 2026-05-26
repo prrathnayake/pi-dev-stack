@@ -1,0 +1,15 @@
+tunnel: YOUR_TUNNEL_ID
+credentials-file: /etc/cloudflared/YOUR_TUNNEL_ID.json
+
+ingress:
+  - hostname: n8n.example.com
+    service: http://localhost:5678
+  - hostname: ai.example.com
+    service: http://localhost:3000
+  - hostname: portainer.example.com
+    service: http://localhost:9000
+  - hostname: logs.example.com
+    service: http://localhost:9999
+  - hostname: status.example.com
+    service: http://localhost:3001
+  - service: http_status:404
