@@ -25,14 +25,14 @@ function fakeRunner(calls: string[][]): CommandRunner {
   };
 }
 
-test("read-only status tool calls homelab status", async () => {
+test("read-only status tool calls homelab status with JSON output", async () => {
   const calls: string[][] = [];
   const tools = createTools(config(), fakeRunner(calls));
   const tool = tools.find((item) => item.name === "homelab_status");
   assert.ok(tool);
   const output = await tool.handler({});
   assert.match(output, /"ok": true/);
-  assert.deepEqual(calls, [["status"]]);
+  assert.deepEqual(calls, [["status", "--json"]]);
 });
 
 test("service restart is blocked in read-only mode", async () => {
