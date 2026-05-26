@@ -142,19 +142,16 @@ services:
     networks:
       - devnet
 
-  novnc:
-    image: theasp/novnc:latest
-    container_name: pi-novnc
+  home-assistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: pi-home-assistant
     restart: unless-stopped
-    environment:
-      DISPLAY_WIDTH: ${NOVNC_WIDTH:-1280}
-      DISPLAY_HEIGHT: ${NOVNC_HEIGHT:-720}
-      RUN_XTERM: "no"
     ports:
-      - "127.0.0.1:6080:8080"
-    command: ["--vnc", "host.docker.internal:5900"]
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "127.0.0.1:8123:8123"
+    volumes:
+      - ./data/home-assistant:/config
+      - /etc/localtime:/etc/localtime:ro
+    privileged: true
     networks:
       - devnet
 
