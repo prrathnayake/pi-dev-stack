@@ -1,0 +1,8 @@
+.env
+.env.local
+local/
+data/
+logs/
+homepage/
+docker-compose.override.yml
+*.log
