@@ -1,8 +1,12 @@
 .env
 .env.local
+.local-state/
+state/
 local/
 data/
 logs/
+backups/
 homepage/
+cloudflared/config.yml
 docker-compose.override.yml
 *.log
