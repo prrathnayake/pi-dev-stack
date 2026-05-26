@@ -1,0 +1,12 @@
+services:
+  n8n:
+    environment:
+      N8N_LOG_LEVEL: debug
+
+  ollama:
+    environment:
+      OLLAMA_KEEP_ALIVE: 24h
+
+  open-webui:
+    environment:
+      WEBUI_NAME: Pasan AI Lab
