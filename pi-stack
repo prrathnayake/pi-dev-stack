@@ -33,12 +33,22 @@ if ! $DOCKER_CMD ps >/dev/null 2>&1; then
 fi
 
 SERVICES="postgres redis n8n ollama open-webui portainer dozzle uptime-kuma homepage glances home-assistant pihole"
+LOCAL_CLI_DIR="${LOCAL_CLI_DIR:-local/cli.d}"
 
 line() { echo "======================================="; }
 header() { clear || true; line; echo " $APP_NAME"; line; }
 ensure_executable() { chmod +x setup.sh stop.sh tunnel.sh validate.sh pi-stack homelab 2>/dev/null || true; }
 is_service() { echo " $SERVICES " | grep -q " $1 "; }
 container_name() { echo "pi-$1"; }
+
+load_local_cli_extensions() {
+  [ -d "$LOCAL_CLI_DIR" ] || return 0
+  for file in "$LOCAL_CLI_DIR"/*.sh; do
+    [ -f "$file" ] || continue
+    # shellcheck disable=SC1090
+    . "$file"
+  done
+}
 
 system_info() {
   echo "OS: $OS_NAME"
@@ -104,7 +114,6 @@ service_cmd() {
 service_alias_cmd() {
   service="$1"
   action="${2:-status}"
-  extra="${3:-}"
 
   if ! is_service "$service"; then
     echo "Unknown service: $service"
@@ -238,10 +247,16 @@ Service aliases:
   homelab pihole status
   homelab pihole block ads.example.com
 
+Local CLI extensions:
+  Put ignored custom scripts in local/cli.d/*.sh
+  Implement: local_cli_command <command> [args...]
+
 Services:
   postgres redis n8n ollama open-webui portainer dozzle uptime-kuma homepage glances home-assistant pihole
 EOF
 }
+
+load_local_cli_extensions
 
 cmd="${1:-menu}"
 case "$cmd" in
@@ -266,6 +281,8 @@ case "$cmd" in
     if is_service "$cmd"; then
       shift
       service_alias_cmd "$cmd" "${1:-status}" "${2:-}"
+    elif declare -F local_cli_command >/dev/null 2>&1 && local_cli_command "$@"; then
+      exit 0
     else
       echo "Unknown command: $cmd"
       echo "Run: homelab help"
