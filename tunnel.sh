@@ -47,14 +47,11 @@ service_port() {
 
 service_scheme() {
   case "$1" in
-    code-server|code) echo "https" ;;
     *) echo "http" ;;
   esac
 }
 
-service_key() {
-  echo "$1" | tr '[:lower:]-' '[:upper:]_'
-}
+service_key() { echo "$1" | tr '[:lower:]-' '[:upper:]_'; }
 
 service_compose_name() {
   case "$1" in
@@ -86,43 +83,61 @@ start_service_if_needed() {
   esac
 }
 
+wait_for_origin() {
+  name="$1"
+  scheme="$2"
+  port="$3"
+  origin="${scheme}://127.0.0.1:${port}"
+
+  echo "Checking origin: $origin"
+  for i in {1..30}; do
+    if curl -fsS --max-time 3 "$origin" >/dev/null 2>&1; then
+      echo "Origin is reachable: $origin"
+      return 0
+    fi
+    if curl -kfsS --max-time 3 "$origin" >/dev/null 2>&1; then
+      echo "Origin is reachable with insecure TLS: $origin"
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "Origin is not reachable: $origin"
+  echo "Check service status: homelab $name status"
+  echo "Check logs: homelab $name logs"
+  return 1
+}
+
 start_one() {
   name="$1"
   port="$(service_port "$name")"
   scheme="$(service_scheme "$name")"
-  if [ -z "$port" ]; then
-    echo "Unknown tunnel service: $name"
-    exit 1
-  fi
+  if [ -z "$port" ]; then echo "Unknown tunnel service: $name"; exit 1; fi
 
   compose_name="$(service_compose_name "$name")"
   key="$(service_key "$compose_name")"
   log="logs/tunnel-${compose_name}.log"
 
   echo "Ensuring $compose_name is running..."
-  start_service_if_needed "$name" >/dev/null 2>&1 || true
+  start_service_if_needed "$name"
+
+  wait_for_origin "$compose_name" "$scheme" "$port" || return 1
 
   pkill -f "cloudflared tunnel --url ${scheme}://localhost:${port}" || true
-  pkill -f "cloudflared tunnel --url http://localhost:${port}" || true
-  pkill -f "cloudflared tunnel --url https://localhost:${port}" || true
+  pkill -f "cloudflared tunnel --url ${scheme}://127.0.0.1:${port}" || true
   rm -f "$log"
 
-  echo "Starting tunnel for $compose_name on ${scheme}://localhost:$port..."
-  cloudflared tunnel --url "${scheme}://localhost:${port}" > "$log" 2>&1 &
+  echo "Starting tunnel for $compose_name on ${scheme}://127.0.0.1:$port..."
+  cloudflared tunnel --url "${scheme}://127.0.0.1:${port}" > "$log" 2>&1 &
 
   url=""
   for i in {1..45}; do
     url=$(grep -o 'https://[-0-9a-z]*\.trycloudflare\.com' "$log" | head -n 1 || true)
-    if [ -n "$url" ]; then
-      break
-    fi
+    [ -n "$url" ] && break
     sleep 2
   done
 
-  if [ -z "$url" ]; then
-    echo "Failed to create tunnel for $compose_name. Check: $log"
-    return 1
-  fi
+  if [ -z "$url" ]; then echo "Failed to create tunnel for $compose_name. Check: $log"; return 1; fi
 
   grep -v "^${key}_URL=" "$STATE_FILE" 2>/dev/null > "${STATE_FILE}.tmp" || true
   echo "${key}_URL=${url}" >> "${STATE_FILE}.tmp"
@@ -143,56 +158,16 @@ start_one() {
 
 start_group() {
   case "$1" in
-    n8n|webui|open-webui|portainer|dozzle|logs|uptime|uptime-kuma|status|homepage|home|glances|home-assistant|ha|pihole|pi-hole|traefik|proxy|vaultwarden|vault|gitea|git|minio|syncthing|sync|filebrowser|files|netdata|prometheus|grafana|nodered|node-red|code-server|code|desktop|novnc|kicad)
-      start_one "$1"
-      ;;
-    core)
-      start_one n8n
-      start_one open-webui
-      start_one portainer
-      start_one homepage
-      ;;
-    monitoring)
-      start_one homepage
-      start_one uptime-kuma
-      start_one dozzle
-      start_one glances
-      start_one netdata
-      start_one prometheus
-      start_one grafana
-      ;;
-    automation)
-      start_one n8n
-      start_one nodered
-      ;;
-    ai)
-      start_one open-webui
-      ;;
-    dev)
-      start_one gitea
-      start_one code-server
-      start_one filebrowser
-      ;;
-    storage)
-      start_one minio
-      start_one syncthing
-      start_one filebrowser
-      ;;
-    security)
-      start_one pihole
-      start_one vaultwarden
-      ;;
-    all)
-      for service in $WEB_TUNNEL_SERVICES; do
-        start_one "$service"
-      done
-      ;;
-    *)
-      echo "Unknown tunnel group: $1"
-      echo "Available: core, monitoring, automation, ai, dev, storage, security, all"
-      echo "Services: $WEB_TUNNEL_SERVICES"
-      exit 1
-      ;;
+    n8n|webui|open-webui|portainer|dozzle|logs|uptime|uptime-kuma|status|homepage|home|glances|home-assistant|ha|pihole|pi-hole|traefik|proxy|vaultwarden|vault|gitea|git|minio|syncthing|sync|filebrowser|files|netdata|prometheus|grafana|nodered|node-red|code-server|code|desktop|novnc|kicad) start_one "$1" ;;
+    core) start_one n8n; start_one open-webui; start_one portainer; start_one homepage ;;
+    monitoring) start_one homepage; start_one uptime-kuma; start_one dozzle; start_one glances; start_one netdata; start_one prometheus; start_one grafana ;;
+    automation) start_one n8n; start_one nodered ;;
+    ai) start_one open-webui ;;
+    dev) start_one gitea; start_one code-server; start_one filebrowser ;;
+    storage) start_one minio; start_one syncthing; start_one filebrowser ;;
+    security) start_one pihole; start_one vaultwarden ;;
+    all) for service in $WEB_TUNNEL_SERVICES; do start_one "$service"; done ;;
+    *) echo "Unknown tunnel group: $1"; echo "Available: core, monitoring, automation, ai, dev, storage, security, all"; echo "Services: $WEB_TUNNEL_SERVICES"; exit 1 ;;
   esac
 }
 
@@ -205,25 +180,13 @@ stop_tunnels() {
     port="$(service_port "$target")"
     scheme="$(service_scheme "$target")"
     [ -n "$port" ] && pkill -f "cloudflared tunnel --url ${scheme}://localhost:${port}" || true
-    [ -n "$port" ] && pkill -f "cloudflared tunnel --url http://localhost:${port}" || true
-    [ -n "$port" ] && pkill -f "cloudflared tunnel --url https://localhost:${port}" || true
+    [ -n "$port" ] && pkill -f "cloudflared tunnel --url ${scheme}://127.0.0.1:${port}" || true
     echo "Stopped tunnel: $target"
   fi
 }
 
-show_status() {
-  echo "Running cloudflared quick tunnels:"
-  pgrep -af 'cloudflared tunnel --url' || echo "No quick tunnels running."
-}
-
-show_urls() {
-  echo "Current saved tunnel URLs:"
-  if [ -f "$STATE_FILE" ]; then
-    cat "$STATE_FILE" | sort | tee "$URL_FILE"
-  else
-    echo "No saved tunnel URLs. Run: homelab tunnel core"
-  fi
-}
+show_status() { echo "Running cloudflared quick tunnels:"; pgrep -af 'cloudflared tunnel --url' || echo "No quick tunnels running."; }
+show_urls() { echo "Current saved tunnel URLs:"; if [ -f "$STATE_FILE" ]; then cat "$STATE_FILE" | sort | tee "$URL_FILE"; else echo "No saved tunnel URLs. Run: homelab tunnel core"; fi; }
 
 case "$ACTION" in
   start) start_group "$SERVICE"; show_urls ;;
@@ -231,8 +194,5 @@ case "$ACTION" in
   restart) stop_tunnels "$SERVICE"; start_group "$SERVICE"; show_urls ;;
   status) show_status ;;
   urls) show_urls ;;
-  *)
-    echo "Usage: ./tunnel.sh [core|monitoring|automation|ai|dev|storage|security|all|service-name] [start|stop|restart|status|urls]"
-    exit 1
-    ;;
+  *) echo "Usage: ./tunnel.sh [core|monitoring|automation|ai|dev|storage|security|all|service-name] [start|stop|restart|status|urls]"; exit 1 ;;
 esac
