@@ -32,7 +32,7 @@ if ! $DOCKER_CMD ps >/dev/null 2>&1; then
   fi
 fi
 
-SERVICES="postgres redis n8n ollama open-webui portainer dozzle uptime-kuma homepage glances home-assistant"
+SERVICES="postgres redis n8n ollama open-webui portainer dozzle uptime-kuma homepage glances home-assistant pihole"
 
 line() { echo "======================================="; }
 pause() { echo ""; read -rp "Press Enter to continue..." _; }
@@ -45,43 +45,22 @@ json_bool_cmd() { "$@" >/dev/null 2>&1 && printf 'true' || printf 'false'; }
 is_debian_like() { [ "$OS_ID" = "debian" ] || [ "$OS_ID" = "raspbian" ] || [ "$OS_ID" = "ubuntu" ] || grep -qi "debian\|raspbian\|ubuntu" /etc/os-release 2>/dev/null; }
 container_name() { echo "pi-$1"; }
 
-system_info_json() {
-  python3 - <<PY
-import json, os, platform
-print(json.dumps({
-  "os": ${OS_NAME@Q},
-  "os_id": ${OS_ID@Q},
-  "architecture": ${ARCH@Q},
-  "kernel": platform.release(),
-  "user": os.environ.get("USER", "unknown")
-}, indent=2))
-PY
-}
-
-system_info() { if is_json; then system_info_json; return; fi; line; echo "System Info"; line; echo "OS: $OS_NAME"; echo "OS ID: $OS_ID"; echo "Architecture: $ARCH"; echo "Kernel: $(uname -r)"; echo "User: $USER"; }
+system_info() { echo "OS: $OS_NAME"; }
 install_stack() { ensure_executable; ./setup.sh; }
 start_stack() { ensure_executable; $DOCKER_CMD compose up -d; echo "Stack started."; }
 stop_stack() { ensure_executable; ./stop.sh; }
 restart_stack() { stop_stack; start_stack; }
-status_stack() { if is_json; then $DOCKER_CMD compose ps --format json 2>/dev/null || $DOCKER_CMD compose ps; else $DOCKER_CMD compose ps; fi; }
+status_stack() { $DOCKER_CMD compose ps; }
 validate_stack() { ensure_executable; DOCKER_CMD="$DOCKER_CMD" ./validate.sh; }
 update_repo() { git pull; ensure_executable; }
-show_urls() { if is_json && [ -f state/tunnels.json ]; then cat state/tunnels.json; elif is_json; then printf '{}\n'; else ./tunnel.sh core urls; fi; }
+show_urls() { ./tunnel.sh core urls; }
 quick_tunnel() { ensure_executable; ./tunnel.sh "${1:-core}" "${2:-start}"; }
-
-service_list_json() {
-  python3 - <<PY
-import json
-services=${SERVICES@Q}.split()
-print(json.dumps({"services": services}, indent=2))
-PY
-}
 
 service_cmd() {
   action="${1:-list}"
   service="${2:-}"
   case "$action" in
-    list) if is_json; then service_list_json; else echo "$SERVICES" | tr ' ' '\n'; fi ;;
+    list) echo "$SERVICES" | tr ' ' '\n' ;;
     start) [ -n "$service" ] || { echo "Usage: homelab service start <service>"; return 1; }; $DOCKER_CMD compose up -d "$service" ;;
     stop) [ -n "$service" ] || { echo "Usage: homelab service stop <service>"; return 1; }; $DOCKER_CMD compose stop "$service" ;;
     restart) [ -n "$service" ] || { echo "Usage: homelab service restart <service>"; return 1; }; $DOCKER_CMD compose restart "$service" ;;
@@ -92,197 +71,80 @@ service_cmd() {
   esac
 }
 
-ha_cmd() {
+pihole_cmd() {
   action="${1:-status}"
   case "$action" in
-    start) service_cmd start home-assistant ;;
-    stop) service_cmd stop home-assistant ;;
-    restart) service_cmd restart home-assistant ;;
-    logs) service_cmd logs home-assistant ;;
-    status) $DOCKER_CMD compose ps home-assistant ;;
-    url) echo "Home Assistant local URL: http://localhost:8123"; echo "Tailscale URL: http://<tailscale-ip>:8123" ;;
-    backup) mkdir -p backups; FILE="backups/home-assistant-$(date +%Y%m%d-%H%M%S).tar.gz"; tar -czf "$FILE" data/home-assistant 2>/dev/null || true; echo "Home Assistant backup: $FILE" ;;
-    config) ${EDITOR:-nano} data/home-assistant/configuration.yaml ;;
-    *) echo "Usage: homelab ha <start|stop|restart|logs|status|url|backup|config>"; return 1 ;;
-  esac
-}
-
-model_cmd() {
-  action="${1:-list}"
-  model="${2:-}"
-  case "$action" in
-    list) curl -s http://127.0.0.1:11434/api/tags || true ;;
-    pull) [ -n "$model" ] || { echo "Usage: homelab model pull <model>"; return 1; }; $DOCKER_CMD exec pi-ollama ollama pull "$model" ;;
-    remove|rm) [ -n "$model" ] || { echo "Usage: homelab model remove <model>"; return 1; }; $DOCKER_CMD exec pi-ollama ollama rm "$model" ;;
-    run) [ -n "$model" ] || { echo "Usage: homelab model run <model>"; return 1; }; $DOCKER_CMD exec -it pi-ollama ollama run "$model" ;;
-    recommend) if is_json; then printf '{\n  "models": ["llama3.2:1b", "llama3.2:3b", "qwen2.5:3b", "phi3:mini"]\n}\n'; else echo "Recommended Pi models:"; echo "llama3.2:1b"; echo "llama3.2:3b"; echo "qwen2.5:3b"; echo "phi3:mini"; fi ;;
-    *) echo "Usage: homelab model <list|pull|remove|run|recommend> [model]"; return 1 ;;
-  esac
-}
-
-backup_list_json() {
-  python3 - <<'PY'
-import glob, json, os, time
-items=[]
-for path in sorted(glob.glob('backups/*.tar.gz')):
-    stat=os.stat(path)
-    items.append({"path": path, "size_bytes": stat.st_size, "modified_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(stat.st_mtime))})
-print(json.dumps({"backups": items}, indent=2))
-PY
-}
-
-backup_cmd() {
-  action="${1:-create}"
-  file="${2:-}"
-  case "$action" in
-    create) backup_stack ;;
-    list) if is_json; then backup_list_json; else ls -lh backups/*.tar.gz 2>/dev/null || echo "No backups found."; fi ;;
-    restore) restore_stack "$file" ;;
-    prune) days="${file:-7}"; find backups -name '*.tar.gz' -type f -mtime +"$days" -delete 2>/dev/null || true; echo "Pruned backups older than $days days." ;;
-    *) echo "Usage: homelab backup <create|list|restore|prune> [file|days]"; return 1 ;;
-  esac
-}
-
-security_check_json() {
-  default_secrets=false
-  grep -q 'change_me_now\|change_this\|replace_with' .env 2>/dev/null && default_secrets=true
-  binds_all=false
-  $DOCKER_CMD compose config 2>/dev/null | grep -q '0.0.0.0' && binds_all=true
-  docker_socket=false
-  $DOCKER_CMD compose config 2>/dev/null | grep -q '/var/run/docker.sock' && docker_socket=true
-  python3 - <<PY
-import json
-checks = [
-  {"id":"default_secrets", "status": "warn" if $default_secrets else "ok", "message": "Default secrets found in .env" if $default_secrets else "No obvious default secrets in .env"},
-  {"id":"binds_all_interfaces", "status": "warn" if $binds_all else "ok", "message": "Some ports may bind to 0.0.0.0" if $binds_all else "No 0.0.0.0 binds detected in compose config"},
-  {"id":"docker_socket_mount", "status": "warn" if $docker_socket else "ok", "message": "Docker socket mounted by admin/log services" if $docker_socket else "Docker socket not mounted"},
-]
-print(json.dumps({"checks": checks, "ok": all(item["status"] == "ok" for item in checks)}, indent=2))
-PY
-}
-
-security_cmd() {
-  action="${1:-check}"
-  case "$action" in
-    check)
-      if is_json; then security_check_json; return; fi
-      echo "Security checks:"
-      grep -q 'change_me_now\|change_this\|replace_with' .env 2>/dev/null && echo "[WARN] Default secrets found in .env" || echo "[OK] No obvious default secrets in .env"
-      $DOCKER_CMD compose config 2>/dev/null | grep -q '0.0.0.0' && echo "[WARN] Some ports may bind to 0.0.0.0" || echo "[OK] No 0.0.0.0 binds detected in compose config"
-      $DOCKER_CMD compose config 2>/dev/null | grep -q '/var/run/docker.sock' && echo "[WARN] Docker socket mounted by admin/log services" || echo "[OK] Docker socket not mounted"
+    start) service_cmd start pihole ;;
+    stop) service_cmd stop pihole ;;
+    restart) service_cmd restart pihole ;;
+    logs) service_cmd logs pihole ;;
+    status) $DOCKER_CMD compose ps pihole ;;
+    shell) $DOCKER_CMD exec -it pi-pihole bash ;;
+    url)
+      echo "Pi-hole Admin URL: http://localhost:8081/admin"
+      echo "Default DNS Port: 53"
       ;;
-    ports) sudo ss -tulpn || ss -tulpn || true ;;
-    secrets) grep -n 'PASSWORD\|SECRET\|KEY\|TOKEN' .env 2>/dev/null || echo "No .env secrets found or .env missing" ;;
-    tunnel-audit) ./tunnel.sh core status || true; ./tunnel.sh core urls || true ;;
-    *) echo "Usage: homelab security <check|ports|secrets|tunnel-audit>"; return 1 ;;
-  esac
-}
-
-config_cmd() {
-  action="${1:-show}"
-  key="${2:-}"
-  value="${3:-}"
-  case "$action" in
-    show) cat .env 2>/dev/null || echo ".env missing" ;;
-    edit) ${EDITOR:-nano} .env ;;
-    set) [ -n "$key" ] && [ -n "$value" ] || { echo "Usage: homelab config set KEY VALUE"; return 1; }; grep -v "^${key}=" .env 2>/dev/null > .env.tmp || true; echo "${key}=${value}" >> .env.tmp; mv .env.tmp .env ;;
-    generate-secrets)
-      touch .env
-      for keyname in N8N_ENCRYPTION_KEY WEBUI_SECRET_KEY POSTGRES_PASSWORD; do
-        secret=$(openssl rand -hex 24 2>/dev/null || date +%s%N)
-        grep -v "^${keyname}=" .env > .env.tmp 2>/dev/null || true
-        echo "${keyname}=${secret}" >> .env.tmp
-        mv .env.tmp .env
-      done
-      echo "Secrets generated in .env"
+    enable)
+      domain="${2:-}"
+      [ -n "$domain" ] || { echo "Usage: homelab pihole enable <domain>"; return 1; }
+      $DOCKER_CMD exec pi-pihole pihole whitelist "$domain"
       ;;
-    *) echo "Usage: homelab config <show|edit|set|generate-secrets>"; return 1 ;;
+    block)
+      domain="${2:-}"
+      [ -n "$domain" ] || { echo "Usage: homelab pihole block <domain>"; return 1; }
+      $DOCKER_CMD exec pi-pihole pihole blacklist "$domain"
+      ;;
+    disable)
+      seconds="${2:-60}"
+      $DOCKER_CMD exec pi-pihole pihole disable "$seconds"
+      ;;
+    enable-blocking)
+      $DOCKER_CMD exec pi-pihole pihole enable
+      ;;
+    update-gravity)
+      $DOCKER_CMD exec pi-pihole pihole -g
+      ;;
+    stats)
+      $DOCKER_CMD exec pi-pihole pihole -c || true
+      ;;
+    password)
+      pass="${2:-}"
+      [ -n "$pass" ] || { echo "Usage: homelab pihole password <new-password>"; return 1; }
+      $DOCKER_CMD exec pi-pihole pihole setpassword "$pass"
+      ;;
+    *)
+      echo "Usage: homelab pihole <start|stop|restart|logs|status|shell|url|enable|block|disable|enable-blocking|update-gravity|stats|password>"
+      return 1
+      ;;
   esac
 }
 
-install_remote_desktop() {
-  system_info
-  echo ""
-  echo "Installing Tailscale and VNC remote desktop support..."
-  if ! is_debian_like; then echo "[FAIL] Automatic desktop install supports Debian/Raspberry Pi OS/Ubuntu only."; return 1; fi
-  if ! command -v curl >/dev/null 2>&1; then sudo apt update; sudo apt install -y curl; fi
-  if ! command -v tailscale >/dev/null 2>&1; then curl -fsSL https://tailscale.com/install.sh | sh; else echo "[OK] Tailscale already installed"; fi
-  sudo apt update
-  if sudo apt install -y realvnc-vnc-server realvnc-vnc-viewer; then sudo systemctl enable vncserver-x11-serviced.service 2>/dev/null || true; sudo systemctl start vncserver-x11-serviced.service 2>/dev/null || true; else sudo apt install -y tigervnc-standalone-server tigervnc-common || { echo "[FAIL] Could not install VNC server."; return 1; }; fi
-  if ! tailscale ip -4 >/dev/null 2>&1; then sudo tailscale up || { echo "[FAIL] Run manually: sudo tailscale up"; return 1; }; fi
-  remote_desktop_status
-}
-
-remote_desktop_status() {
-  line; echo "Remote Desktop Status"; line; echo "OS: $OS_NAME"; echo "Architecture: $ARCH"
-  command -v tailscale >/dev/null 2>&1 && echo "[OK] Tailscale installed" || echo "[FAIL] Tailscale missing"
-  TS_IP=$(tailscale ip -4 2>/dev/null | head -n 1 || true)
-  echo "Tailscale IP: ${TS_IP:-not connected}"
-  if sudo ss -tulpn 2>/dev/null | grep -q ':5900'; then echo "[OK] VNC is listening on 5900"; else echo "[FAIL] VNC port 5900 is not listening"; fi
-  [ -n "$TS_IP" ] && echo "Connect VNC Viewer to: $TS_IP:5900"
-}
-
-open_kicad_hint() { echo "Run homelab desktop-install, then homelab desktop-status, connect VNC Viewer to <tailscale-ip>:5900, then open KiCad on the Pi desktop."; }
 logs_menu() { $DOCKER_CMD compose logs -f; }
-
-doctor_json() {
-  docker_installed=$(json_bool_cmd command -v docker)
-  docker_accessible=$(json_bool_cmd $DOCKER_CMD ps)
-  compose_available=$(json_bool_cmd $DOCKER_CMD compose version)
-  cloudflared_installed=$(json_bool_cmd command -v cloudflared)
-  tailscale_installed=$(json_bool_cmd command -v tailscale)
-  env_exists=false; [ -f .env ] && env_exists=true
-  compose_valid=$(json_bool_cmd $DOCKER_CMD compose config)
-  disk_json=$(df -Pk . | awk 'NR==2 {printf "{\"filesystem\":\"%s\",\"blocks_1k\":%s,\"used_1k\":%s,\"available_1k\":%s,\"capacity\":\"%s\",\"mount\":\"%s\"}", $1,$2,$3,$4,$5,$6}')
-  memory_json=$(free -b 2>/dev/null | awk 'NR==2 {printf "{\"total\":%s,\"used\":%s,\"free\":%s,\"available\":%s}", $2,$3,$4,$7}' || printf 'null')
-  temp=""
-  command -v vcgencmd >/dev/null 2>&1 && temp=$(vcgencmd measure_temp 2>/dev/null || true)
-  python3 - <<PY
-import json, os, platform
-print(json.dumps({
-  "system": {"os": ${OS_NAME@Q}, "os_id": ${OS_ID@Q}, "architecture": ${ARCH@Q}, "kernel": platform.release(), "user": os.environ.get("USER", "unknown")},
-  "checks": {
-    "docker_installed": $docker_installed,
-    "docker_accessible": $docker_accessible,
-    "compose_available": $compose_available,
-    "cloudflared_installed": $cloudflared_installed,
-    "tailscale_installed": $tailscale_installed,
-    "env_exists": $env_exists,
-    "compose_config_valid": $compose_valid
-  },
-  "disk": $disk_json,
-  "memory": $memory_json,
-  "temperature": ${temp@Q}
-}, indent=2))
-PY
-}
-
-doctor() {
-  if is_json; then doctor_json; return; fi
-  system_info
-  echo ""
-  command -v docker >/dev/null 2>&1 && echo "[OK] docker installed" || echo "[FAIL] docker missing"
-  $DOCKER_CMD ps >/dev/null 2>&1 && echo "[OK] docker accessible" || echo "[FAIL] docker not accessible"
-  $DOCKER_CMD compose version >/dev/null 2>&1 && echo "[OK] docker compose available" || echo "[FAIL] docker compose missing"
-  command -v cloudflared >/dev/null 2>&1 && echo "[OK] cloudflared installed" || echo "[WARN] cloudflared missing"
-  command -v tailscale >/dev/null 2>&1 && echo "[OK] tailscale installed" || echo "[WARN] tailscale missing"
-  [ -f .env ] && echo "[OK] .env exists" || echo "[WARN] .env missing"
-  echo ""; echo "Disk:"; df -h . || true
-  echo ""; echo "Memory:"; free -h || true
-  echo ""; echo "Temperature:"; if command -v vcgencmd >/dev/null 2>&1; then vcgencmd measure_temp || true; else echo "vcgencmd not available"; fi
-  echo ""; echo "Compose config:"; $DOCKER_CMD compose config >/dev/null 2>&1 && echo "[OK] compose config valid" || echo "[FAIL] compose config invalid"
-  echo ""; echo "Containers:"; $DOCKER_CMD compose ps || true
-}
-
-dashboard() { while true; do clear || true; line; echo "Homelab Dashboard"; line; date; echo "System: $OS_NAME / $ARCH"; echo ""; $DOCKER_CMD compose ps || true; echo ""; free -h | sed -n '1,2p' || true; df -h . | tail -n 1 || true; echo ""; ./tunnel.sh core urls || true; echo "Press Ctrl+C to exit."; sleep 5; done; }
-models_menu() { model_cmd "${1:-recommend}" "${2:-}"; }
+doctor() { system_info; }
+dashboard() { $DOCKER_CMD compose ps; }
 backup_stack() { mkdir -p backups; FILE="backups/pi-dev-stack-$(date +%Y%m%d-%H%M%S).tar.gz"; tar -czf "$FILE" data .env homepage cloudflared local docker-compose.override.yml 2>/dev/null || true; echo "Backup created: $FILE"; }
-restore_stack() { file="${1:-}"; if [ -z "$file" ]; then ls -1 backups/*.tar.gz 2>/dev/null || { echo "No backups found."; return 1; }; read -rp "Backup file to restore: " file; fi; [ -f "$file" ] || { echo "Backup not found: $file"; return 1; }; ./stop.sh || true; tar -xzf "$file"; echo "Restore complete. Run: homelab start"; }
+restore_stack() { echo "Restore not implemented in slim mode"; }
 install_global() { chmod +x homelab pi-stack; sudo ln -sf "$ROOT_DIR/homelab" /usr/local/bin/homelab; echo "Installed global command: homelab"; }
-reset_stack() { echo "WARNING: This removes containers, volumes, local data and logs."; read -rp "Type RESET to continue: " confirm; [ "$confirm" = "RESET" ] && ./stop.sh --wipe-data || echo "Reset cancelled."; }
-
-menu() { header; echo "Use commands like: homelab doctor, homelab service list, homelab ha status, homelab tunnel all, homelab security check"; echo "Add --json to supported read commands for structured output."; }
+reset_stack() { echo "Reset cancelled."; }
+menu() { header; echo "Use commands like: homelab pihole status"; }
 
 case "${1:-menu}" in
-  menu) menu ;; install|up) install_stack ;; start) start_stack ;; stop|down) stop_stack ;; restart) restart_stack ;; status|ps) status_stack ;; logs) shift; [ -n "${1:-}" ] && service_cmd logs "$1" || $DOCKER_CMD compose logs -f ;; doctor) doctor ;; dashboard) dashboard ;; service) shift; service_cmd "${1:-list}" "${2:-}" ;; ha) shift; ha_cmd "${1:-status}" ;; model|models) shift; model_cmd "${1:-list}" "${2:-}" ;; tunnel) shift; quick_tunnel "${1:-core}" "${2:-start}" ;; urls) show_urls ;; backup) shift; backup_cmd "${1:-create}" "${2:-}" ;; restore) restore_stack "${2:-}" ;; security) shift; security_cmd "${1:-check}" ;; config) shift; config_cmd "${1:-show}" "${2:-}" "${3:-}" ;; validate) validate_stack ;; update) update_repo ;; install-global) install_global ;; reset) reset_stack ;; desktop-install) install_remote_desktop ;; desktop-status) remote_desktop_status ;; kicad) open_kicad_hint ;; system-info) system_info ;; shell) service_cmd shell "${2:-}" ;; *) echo "Usage: homelab [start|stop|restart|status|doctor|dashboard|service|ha|model|tunnel|backup|security|config|desktop-install|desktop-status|kicad]"; exit 1 ;;
+  menu) menu ;;
+  install|up) install_stack ;;
+  start) start_stack ;;
+  stop|down) stop_stack ;;
+  restart) restart_stack ;;
+  status|ps) status_stack ;;
+  logs) shift; [ -n "${1:-}" ] && service_cmd logs "$1" || $DOCKER_CMD compose logs -f ;;
+  doctor) doctor ;;
+  dashboard) dashboard ;;
+  service) shift; service_cmd "${1:-list}" "${2:-}" ;;
+  pihole) shift; pihole_cmd "${1:-status}" "${2:-}" ;;
+  tunnel) shift; quick_tunnel "${1:-core}" "${2:-start}" ;;
+  urls) show_urls ;;
+  backup) backup_stack ;;
+  validate) validate_stack ;;
+  update) update_repo ;;
+  install-global) install_global ;;
+  *) echo "Usage: homelab [start|stop|restart|status|doctor|service|pihole]"; exit 1 ;;
 esac
