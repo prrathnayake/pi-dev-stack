@@ -35,17 +35,16 @@ fi
 SERVICES="postgres redis n8n ollama open-webui portainer dozzle uptime-kuma homepage glances home-assistant pihole"
 
 line() { echo "======================================="; }
-pause() { echo ""; read -rp "Press Enter to continue..." _; }
 header() { clear || true; line; echo " $APP_NAME"; line; }
 ensure_executable() { chmod +x setup.sh stop.sh tunnel.sh validate.sh pi-stack homelab 2>/dev/null || true; }
-is_json() { [ "$OUTPUT_FORMAT" = "json" ]; }
-json_string() { python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().rstrip("\n")))'; }
-json_bool_cmd() { "$@" >/dev/null 2>&1 && printf 'true' || printf 'false'; }
-
-is_debian_like() { [ "$OS_ID" = "debian" ] || [ "$OS_ID" = "raspbian" ] || [ "$OS_ID" = "ubuntu" ] || grep -qi "debian\|raspbian\|ubuntu" /etc/os-release 2>/dev/null; }
+is_service() { echo " $SERVICES " | grep -q " $1 "; }
 container_name() { echo "pi-$1"; }
 
-system_info() { echo "OS: $OS_NAME"; }
+system_info() {
+  echo "OS: $OS_NAME"
+  echo "Architecture: $ARCH"
+}
+
 install_stack() { ensure_executable; ./setup.sh; }
 start_stack() { ensure_executable; $DOCKER_CMD compose up -d; echo "Stack started."; }
 stop_stack() { ensure_executable; ./stop.sh; }
@@ -59,37 +58,104 @@ quick_tunnel() { ensure_executable; ./tunnel.sh "${1:-core}" "${2:-start}"; }
 service_cmd() {
   action="${1:-list}"
   service="${2:-}"
+
   case "$action" in
-    list) echo "$SERVICES" | tr ' ' '\n' ;;
-    start) [ -n "$service" ] || { echo "Usage: homelab service start <service>"; return 1; }; $DOCKER_CMD compose up -d "$service" ;;
-    stop) [ -n "$service" ] || { echo "Usage: homelab service stop <service>"; return 1; }; $DOCKER_CMD compose stop "$service" ;;
-    restart) [ -n "$service" ] || { echo "Usage: homelab service restart <service>"; return 1; }; $DOCKER_CMD compose restart "$service" ;;
-    logs) [ -n "$service" ] || { echo "Usage: homelab service logs <service>"; return 1; }; $DOCKER_CMD compose logs -f "$service" ;;
-    inspect) [ -n "$service" ] || { echo "Usage: homelab service inspect <service>"; return 1; }; $DOCKER_CMD inspect "$(container_name "$service")" ;;
-    shell) [ -n "$service" ] || { echo "Usage: homelab service shell <service>"; return 1; }; $DOCKER_CMD exec -it "$(container_name "$service")" sh ;;
-    *) echo "Usage: homelab service <list|start|stop|restart|logs|inspect|shell> [service]"; return 1 ;;
+    list)
+      echo "$SERVICES" | tr ' ' '\n'
+      ;;
+    start)
+      [ -n "$service" ] || { echo "Usage: homelab service start <service>"; return 1; }
+      $DOCKER_CMD compose up -d "$service"
+      ;;
+    stop)
+      [ -n "$service" ] || { echo "Usage: homelab service stop <service>"; return 1; }
+      $DOCKER_CMD compose stop "$service"
+      ;;
+    restart)
+      [ -n "$service" ] || { echo "Usage: homelab service restart <service>"; return 1; }
+      $DOCKER_CMD compose restart "$service"
+      ;;
+    status|ps)
+      if [ -n "$service" ]; then
+        $DOCKER_CMD compose ps "$service"
+      else
+        $DOCKER_CMD compose ps
+      fi
+      ;;
+    logs)
+      [ -n "$service" ] || { echo "Usage: homelab service logs <service>"; return 1; }
+      $DOCKER_CMD compose logs -f "$service"
+      ;;
+    inspect)
+      [ -n "$service" ] || { echo "Usage: homelab service inspect <service>"; return 1; }
+      $DOCKER_CMD inspect "$(container_name "$service")"
+      ;;
+    shell)
+      [ -n "$service" ] || { echo "Usage: homelab service shell <service>"; return 1; }
+      $DOCKER_CMD exec -it "$(container_name "$service")" sh
+      ;;
+    *)
+      echo "Usage: homelab service <list|start|stop|restart|status|logs|inspect|shell> [service]"
+      return 1
+      ;;
+  esac
+}
+
+service_alias_cmd() {
+  service="$1"
+  action="${2:-status}"
+  extra="${3:-}"
+
+  if ! is_service "$service"; then
+    echo "Unknown service: $service"
+    echo "Run: homelab service list"
+    return 1
+  fi
+
+  case "$action" in
+    start|stop|restart|status|ps|logs|inspect|shell)
+      service_cmd "$action" "$service"
+      ;;
+    url)
+      service_url "$service"
+      ;;
+    *)
+      echo "Usage: homelab $service <start|stop|restart|status|logs|inspect|shell|url>"
+      return 1
+      ;;
+  esac
+}
+
+service_url() {
+  case "$1" in
+    n8n) echo "n8n: http://localhost:5678" ;;
+    ollama) echo "Ollama API: http://localhost:11434" ;;
+    open-webui) echo "Open WebUI: http://localhost:3000" ;;
+    portainer) echo "Portainer: http://localhost:9000" ;;
+    dozzle) echo "Dozzle: http://localhost:9999" ;;
+    uptime-kuma) echo "Uptime Kuma: http://localhost:3001" ;;
+    homepage) echo "Homepage: http://localhost:8088" ;;
+    glances) echo "Glances: http://localhost:61208" ;;
+    home-assistant) echo "Home Assistant: http://localhost:8123" ;;
+    pihole) echo "Pi-hole Admin: http://localhost:8081/admin" ;;
+    postgres) echo "PostgreSQL: localhost:5432 inside Docker network unless exposed" ;;
+    redis) echo "Redis: localhost:6379 inside Docker network unless exposed" ;;
+    *) echo "No URL registered for service: $1" ;;
   esac
 }
 
 pihole_cmd() {
   action="${1:-status}"
   case "$action" in
-    start) service_cmd start pihole ;;
-    stop) service_cmd stop pihole ;;
-    restart) service_cmd restart pihole ;;
-    logs) service_cmd logs pihole ;;
-    status) $DOCKER_CMD compose ps pihole ;;
-    shell) $DOCKER_CMD exec -it pi-pihole bash ;;
-    url)
-      echo "Pi-hole Admin URL: http://localhost:8081/admin"
-      echo "Default DNS Port: 53"
+    start|stop|restart|status|ps|logs|inspect|shell|url)
+      service_alias_cmd pihole "$action"
       ;;
-    enable)
+    allow|whitelist|enable)
       domain="${2:-}"
-      [ -n "$domain" ] || { echo "Usage: homelab pihole enable <domain>"; return 1; }
+      [ -n "$domain" ] || { echo "Usage: homelab pihole allow <domain>"; return 1; }
       $DOCKER_CMD exec pi-pihole pihole whitelist "$domain"
       ;;
-    block)
+    block|blacklist)
       domain="${2:-}"
       [ -n "$domain" ] || { echo "Usage: homelab pihole block <domain>"; return 1; }
       $DOCKER_CMD exec pi-pihole pihole blacklist "$domain"
@@ -101,7 +167,7 @@ pihole_cmd() {
     enable-blocking)
       $DOCKER_CMD exec pi-pihole pihole enable
       ;;
-    update-gravity)
+    update-gravity|gravity)
       $DOCKER_CMD exec pi-pihole pihole -g
       ;;
     stats)
@@ -113,23 +179,73 @@ pihole_cmd() {
       $DOCKER_CMD exec pi-pihole pihole setpassword "$pass"
       ;;
     *)
-      echo "Usage: homelab pihole <start|stop|restart|logs|status|shell|url|enable|block|disable|enable-blocking|update-gravity|stats|password>"
+      echo "Usage: homelab pihole <start|stop|restart|status|logs|shell|url|allow|block|disable|enable-blocking|gravity|stats|password>"
       return 1
       ;;
   esac
 }
 
-logs_menu() { $DOCKER_CMD compose logs -f; }
-doctor() { system_info; }
+doctor() {
+  system_info
+  echo ""
+  command -v docker >/dev/null 2>&1 && echo "[OK] docker installed" || echo "[FAIL] docker missing"
+  $DOCKER_CMD ps >/dev/null 2>&1 && echo "[OK] docker accessible" || echo "[FAIL] docker not accessible"
+  $DOCKER_CMD compose version >/dev/null 2>&1 && echo "[OK] docker compose available" || echo "[FAIL] docker compose missing"
+  [ -f .env ] && echo "[OK] .env exists" || echo "[WARN] .env missing"
+  echo ""
+  $DOCKER_CMD compose ps || true
+}
+
 dashboard() { $DOCKER_CMD compose ps; }
 backup_stack() { mkdir -p backups; FILE="backups/pi-dev-stack-$(date +%Y%m%d-%H%M%S).tar.gz"; tar -czf "$FILE" data .env homepage cloudflared local docker-compose.override.yml 2>/dev/null || true; echo "Backup created: $FILE"; }
-restore_stack() { echo "Restore not implemented in slim mode"; }
 install_global() { chmod +x homelab pi-stack; sudo ln -sf "$ROOT_DIR/homelab" /usr/local/bin/homelab; echo "Installed global command: homelab"; }
-reset_stack() { echo "Reset cancelled."; }
-menu() { header; echo "Use commands like: homelab pihole status"; }
 
-case "${1:-menu}" in
-  menu) menu ;;
+menu() {
+  header
+  cat <<'EOF'
+Usage:
+  homelab <command>
+  homelab <service> <action>
+
+Stack commands:
+  homelab install
+  homelab start
+  homelab stop
+  homelab restart
+  homelab status
+  homelab logs
+  homelab doctor
+  homelab dashboard
+  homelab validate
+  homelab update
+  homelab backup
+  homelab tunnel
+  homelab urls
+
+Service commands:
+  homelab service list
+  homelab service start <service>
+  homelab service stop <service>
+  homelab service restart <service>
+  homelab service status <service>
+  homelab service logs <service>
+  homelab service shell <service>
+
+Service aliases:
+  homelab n8n start
+  homelab n8n logs
+  homelab n8n url
+  homelab pihole status
+  homelab pihole block ads.example.com
+
+Services:
+  postgres redis n8n ollama open-webui portainer dozzle uptime-kuma homepage glances home-assistant pihole
+EOF
+}
+
+cmd="${1:-menu}"
+case "$cmd" in
+  menu|help|-h|--help) menu ;;
   install|up) install_stack ;;
   start) start_stack ;;
   stop|down) stop_stack ;;
@@ -146,5 +262,14 @@ case "${1:-menu}" in
   validate) validate_stack ;;
   update) update_repo ;;
   install-global) install_global ;;
-  *) echo "Usage: homelab [start|stop|restart|status|doctor|service|pihole]"; exit 1 ;;
+  *)
+    if is_service "$cmd"; then
+      shift
+      service_alias_cmd "$cmd" "${1:-status}" "${2:-}"
+    else
+      echo "Unknown command: $cmd"
+      echo "Run: homelab help"
+      exit 1
+    fi
+    ;;
 esac
