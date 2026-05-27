@@ -155,6 +155,30 @@ services:
     networks:
       - devnet
 
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pi-pihole
+    restart: unless-stopped
+    hostname: ${PIHOLE_HOSTNAME:-pi-hole}
+    ports:
+      - "${PIHOLE_DNS_BIND:-0.0.0.0}:53:53/tcp"
+      - "${PIHOLE_DNS_BIND:-0.0.0.0}:53:53/udp"
+      - "${PIHOLE_WEB_BIND:-127.0.0.1}:8081:80/tcp"
+    environment:
+      TZ: ${TIMEZONE:-Australia/Melbourne}
+      FTLCONF_webserver_api_password: ${PIHOLE_WEBPASSWORD:-change_this_pihole_password}
+      FTLCONF_dns_listeningMode: ${PIHOLE_DNS_LISTENING_MODE:-all}
+      FTLCONF_dns_upstreams: ${PIHOLE_DNS_UPSTREAMS:-1.1.1.1;1.0.0.1}
+    volumes:
+      - ./data/pihole/etc-pihole:/etc/pihole
+      - ./data/pihole/etc-dnsmasq.d:/etc/dnsmasq.d
+    cap_add:
+      - NET_ADMIN
+      - SYS_TIME
+      - SYS_NICE
+    networks:
+      - devnet
+
 networks:
   devnet:
     name: pi-dev-stack
