@@ -179,6 +179,220 @@ services:
     networks:
       - devnet
 
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: pi-watchtower
+    restart: unless-stopped
+    profiles: ["extras"]
+    environment:
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_SCHEDULE: ${WATCHTOWER_SCHEDULE:-0 0 4 * * *}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - devnet
+
+  traefik:
+    image: traefik:v3.1
+    container_name: pi-traefik
+    restart: unless-stopped
+    profiles: ["extras"]
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+    ports:
+      - "127.0.0.1:8082:8080"
+      - "${TRAEFIK_HTTP_BIND:-127.0.0.1}:8080:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./data/traefik:/data
+    networks:
+      - devnet
+
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: pi-vaultwarden
+    restart: unless-stopped
+    profiles: ["extras"]
+    ports:
+      - "127.0.0.1:8083:80"
+    environment:
+      DOMAIN: ${VAULTWARDEN_DOMAIN:-http://localhost:8083}
+      SIGNUPS_ALLOWED: ${VAULTWARDEN_SIGNUPS_ALLOWED:-false}
+      ADMIN_TOKEN: ${VAULTWARDEN_ADMIN_TOKEN:-change_this_vaultwarden_admin_token}
+    volumes:
+      - ./data/vaultwarden:/data
+    networks:
+      - devnet
+
+  gitea:
+    image: gitea/gitea:latest-rootless
+    container_name: pi-gitea
+    restart: unless-stopped
+    profiles: ["extras"]
+    ports:
+      - "127.0.0.1:3002:3000"
+      - "127.0.0.1:2222:2222"
+    environment:
+      USER_UID: 1000
+      USER_GID: 1000
+      GITEA__server__ROOT_URL: ${GITEA_ROOT_URL:-http://localhost:3002/}
+      GITEA__server__SSH_PORT: 2222
+    volumes:
+      - ./data/gitea:/var/lib/gitea
+      - ./data/gitea-config:/etc/gitea
+    networks:
+      - devnet
+
+  minio:
+    image: minio/minio:latest
+    container_name: pi-minio
+    restart: unless-stopped
+    profiles: ["extras"]
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:9002:9000"
+      - "127.0.0.1:9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change_this_minio_password}
+    volumes:
+      - ./data/minio:/data
+    networks:
+      - devnet
+
+  syncthing:
+    image: syncthing/syncthing:latest
+    container_name: pi-syncthing
+    restart: unless-stopped
+    profiles: ["extras"]
+    ports:
+      - "127.0.0.1:8384:8384"
+      - "22000:22000/tcp"
+      - "22000:22000/udp"
+      - "21027:21027/udp"
+    volumes:
+      - ./data/syncthing:/var/syncthing
+    networks:
+      - devnet
+
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: pi-filebrowser
+    restart: unless-stopped
+    profiles: ["extras"]
+    ports:
+      - "127.0.0.1:8084:80"
+    volumes:
+      - ./data/filebrowser/database:/database
+      - ./data/filebrowser/config:/config
+      - ./data:/srv/data
+      - ./local:/srv/local
+    networks:
+      - devnet
+
+  netdata:
+    image: netdata/netdata:stable
+    container_name: pi-netdata
+    restart: unless-stopped
+    profiles: ["extras"]
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
+    ports:
+      - "127.0.0.1:19999:19999"
+    volumes:
+      - ./data/netdata/config:/etc/netdata
+      - ./data/netdata/lib:/var/lib/netdata
+      - ./data/netdata/cache:/var/cache/netdata
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - devnet
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: pi-prometheus
+    restart: unless-stopped
+    profiles: ["extras"]
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./data/prometheus:/prometheus
+    networks:
+      - devnet
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: pi-grafana
+    restart: unless-stopped
+    profiles: ["extras"]
+    ports:
+      - "127.0.0.1:3003:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change_this_grafana_password}
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+    networks:
+      - devnet
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: pi-mosquitto
+    restart: unless-stopped
+    profiles: ["extras"]
+    ports:
+      - "127.0.0.1:1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./data/mosquitto/data:/mosquitto/data
+      - ./data/mosquitto/log:/mosquitto/log
+    networks:
+      - devnet
+
+  nodered:
+    image: nodered/node-red:latest
+    container_name: pi-nodered
+    restart: unless-stopped
+    profiles: ["extras"]
+    ports:
+      - "127.0.0.1:1880:1880"
+    environment:
+      TZ: ${TIMEZONE:-Australia/Melbourne}
+    volumes:
+      - ./data/nodered:/data
+    networks:
+      - devnet
+
+  code-server:
+    image: lscr.io/linuxserver/code-server:latest
+    container_name: pi-code-server
+    restart: unless-stopped
+    profiles: ["extras"]
+    ports:
+      - "127.0.0.1:8443:8443"
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: ${TIMEZONE:-Australia/Melbourne}
+      PASSWORD: ${CODE_SERVER_PASSWORD:-change_this_code_server_password}
+      DEFAULT_WORKSPACE: /workspace
+    volumes:
+      - ./data/code-server:/config
+      - ./:/workspace
+    networks:
+      - devnet
+
 networks:
   devnet:
     name: pi-dev-stack
