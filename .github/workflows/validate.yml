@@ -1,0 +1,42 @@
+name: Validate Pi Dev Stack
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate docker compose
+        run: docker compose config
+
+      - name: Validate bash scripts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck homelab pi-stack setup.sh stop.sh tunnel.sh validate.sh || true
+
+      - name: Validate executable permissions
+        run: |
+          test -x homelab || chmod +x homelab
+          test -x pi-stack || chmod +x pi-stack
+
+      - name: Smoke test CLI
+        run: |
+          ./homelab help
+          ./homelab service list
+          ./homelab n8n url
+          ./homelab pihole url
+
+      - name: Validate ignored local paths
+        run: |
+          grep 'local/' .gitignore
+          grep 'data/' .gitignore
+          grep 'backups/' .gitignore
