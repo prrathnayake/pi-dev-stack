@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Copy this file to:
+# local/cli.d/custom.sh
+#
+# Then implement your own commands.
+#
+# local/ is gitignored,
+# so your commands survive git pull.
+
+local_cli_command() {
+  cmd="$1"
+
+  case "$cmd" in
+    hello)
+      echo "Hello from local extension"
+      return 0
+      ;;
+
+    my-stack)
+      echo "Run custom automation here"
+      return 0
+      ;;
+  esac
+
+  return 1
+}
