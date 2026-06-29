@@ -43,6 +43,10 @@ mkdir -p data/n8n
 mkdir -p data/ollama
 mkdir -p data/open-webui
 mkdir -p data/portainer
+mkdir -p data/plex/config
+mkdir -p data/dockge
+mkdir -p data/dockge/stacks
+mkdir -p media
 mkdir -p logs
 
 echo "Fixing container data permissions..."
@@ -50,6 +54,7 @@ sudo chown -R 1000:1000 data/n8n
 sudo chown -R 999:999 data/postgres || true
 sudo chown -R 999:999 data/redis || true
 sudo chown -R 0:0 data/ollama data/open-webui data/portainer || true
+sudo chown -R 1000:1000 data/plex/config data/dockge media || true
 
 if [ ! -f .env ]; then
   cp .env.example .env

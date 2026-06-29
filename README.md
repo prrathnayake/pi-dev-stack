@@ -58,6 +58,12 @@ This repository gives you:
 | Homepage | Homelab dashboard | http://localhost:8088 |
 | Glances | System monitoring | http://localhost:61208 |
 
+### Media
+
+| Service | Purpose | Local URL |
+|---|---|---|
+| Plex | Media streaming server | http://localhost:32400/web |
+
 ## Quick Start
 
 ```bash

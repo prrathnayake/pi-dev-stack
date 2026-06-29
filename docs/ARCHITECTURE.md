@@ -49,6 +49,19 @@ local/backup-hooks.sh
 local/desktop-start.sh
 ```
 
+### media/
+
+Plex media library bind mount. Not part of `data/` so it is excluded from
+`homelab backup` by design (large, often already backed up elsewhere).
+
+Examples:
+
+```text
+media/movies
+media/tv
+media/music
+```
+
 ## Generated configuration
 
 Generated configs should never overwrite tracked templates.

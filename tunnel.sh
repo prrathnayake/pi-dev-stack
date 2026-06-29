@@ -16,7 +16,7 @@ ACTION="${2:-start}"
 STATE_FILE="state/tunnels.env"
 URL_FILE=".local-state/current-urls.txt"
 
-WEB_TUNNEL_SERVICES="n8n open-webui portainer dozzle uptime-kuma homepage glances home-assistant pihole traefik vaultwarden gitea minio syncthing filebrowser netdata prometheus grafana nodered code-server"
+WEB_TUNNEL_SERVICES="n8n open-webui portainer dozzle uptime-kuma homepage glances home-assistant pihole traefik vaultwarden gitea minio syncthing filebrowser netdata prometheus grafana nodered code-server plex dockge"
 
 service_port() {
   case "$1" in
@@ -40,6 +40,8 @@ service_port() {
     grafana) echo "3003" ;;
     nodered|node-red) echo "1880" ;;
     code-server|code) echo "8443" ;;
+    plex) echo "32400" ;;
+    dockge) echo "5001" ;;
     desktop|novnc|kicad) echo "6080" ;;
     *) echo "" ;;
   esac
@@ -74,7 +76,7 @@ service_compose_name() {
 start_service_if_needed() {
   name="$(service_compose_name "$1")"
   case "$name" in
-    traefik|vaultwarden|gitea|minio|syncthing|filebrowser|netdata|prometheus|grafana|nodered|code-server)
+    traefik|vaultwarden|gitea|minio|syncthing|filebrowser|netdata|prometheus|grafana|nodered|code-server|plex|dockge)
       $DOCKER_CMD compose --profile extras up -d "$name"
       ;;
     *)
@@ -158,7 +160,7 @@ start_one() {
 
 start_group() {
   case "$1" in
-    n8n|webui|open-webui|portainer|dozzle|logs|uptime|uptime-kuma|status|homepage|home|glances|home-assistant|ha|pihole|pi-hole|traefik|proxy|vaultwarden|vault|gitea|git|minio|syncthing|sync|filebrowser|files|netdata|prometheus|grafana|nodered|node-red|code-server|code|desktop|novnc|kicad) start_one "$1" ;;
+    n8n|webui|open-webui|portainer|dozzle|logs|uptime|uptime-kuma|status|homepage|home|glances|home-assistant|ha|pihole|pi-hole|traefik|proxy|vaultwarden|vault|gitea|git|minio|syncthing|sync|filebrowser|files|netdata|prometheus|grafana|nodered|node-red|code-server|code|plex|dockge|desktop|novnc|kicad) start_one "$1" ;;
     core) start_one n8n; start_one open-webui; start_one portainer; start_one homepage ;;
     monitoring) start_one homepage; start_one uptime-kuma; start_one dozzle; start_one glances; start_one netdata; start_one prometheus; start_one grafana ;;
     automation) start_one n8n; start_one nodered ;;
@@ -166,8 +168,10 @@ start_group() {
     dev) start_one gitea; start_one code-server; start_one filebrowser ;;
     storage) start_one minio; start_one syncthing; start_one filebrowser ;;
     security) start_one pihole; start_one vaultwarden ;;
+    media) start_one plex ;;
+    ops) start_one portainer; start_one dockge; start_one dozzle; start_one uptime-kuma ;;
     all) for service in $WEB_TUNNEL_SERVICES; do start_one "$service"; done ;;
-    *) echo "Unknown tunnel group: $1"; echo "Available: core, monitoring, automation, ai, dev, storage, security, all"; echo "Services: $WEB_TUNNEL_SERVICES"; exit 1 ;;
+    *) echo "Unknown tunnel group: $1"; echo "Available: core, monitoring, automation, ai, dev, storage, security, media, ops, all"; echo "Services: $WEB_TUNNEL_SERVICES"; exit 1 ;;
   esac
 }
 
@@ -194,5 +198,5 @@ case "$ACTION" in
   restart) stop_tunnels "$SERVICE"; start_group "$SERVICE"; show_urls ;;
   status) show_status ;;
   urls) show_urls ;;
-  *) echo "Usage: ./tunnel.sh [core|monitoring|automation|ai|dev|storage|security|all|service-name] [start|stop|restart|status|urls]"; exit 1 ;;
+  *) echo "Usage: ./tunnel.sh [core|monitoring|automation|ai|dev|storage|security|media|ops|all|service-name] [start|stop|restart|status|urls]"; exit 1 ;;
 esac

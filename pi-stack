@@ -121,6 +121,8 @@ service_url() {
     mosquitto) echo "Mosquitto MQTT: localhost:1883" ;;
     nodered) echo "Node-RED: http://localhost:1880" ;;
     code-server) echo "Code Server: https://localhost:8443" ;;
+    plex) echo "Plex: http://localhost:32400/web" ;;
+    dockge) echo "Dockge: http://localhost:5001" ;;
     postgres) echo "PostgreSQL: localhost:5432 inside Docker network unless exposed" ;;
     redis) echo "Redis: localhost:6379 inside Docker network unless exposed" ;;
     watchtower) echo "Watchtower has no web UI. Use: homelab watchtower logs" ;;
