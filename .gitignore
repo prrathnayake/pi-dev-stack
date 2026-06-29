@@ -6,6 +6,7 @@ local/
 data/
 logs/
 backups/
+media/
 homepage/
 cloudflared/config.yml
 docker-compose.override.yml

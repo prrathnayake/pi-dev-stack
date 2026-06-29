@@ -58,6 +58,8 @@ homelab <service> <action>
 | Mosquitto | [mosquitto.md](mosquitto.md) |
 | Node-RED | [nodered.md](nodered.md) |
 | Code Server | [code-server.md](code-server.md) |
+| Plex | [plex.md](plex.md) |
+| Dockge | [dockge.md](dockge.md) |
 
 ## Extra Profile Services
 

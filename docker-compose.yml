@@ -393,6 +393,51 @@ services:
     networks:
       - devnet
 
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: pi-plex
+    restart: unless-stopped
+    profiles: ["extras"]
+    ports:
+      - "${PLEX_WEB_BIND:-127.0.0.1}:32400:32400"
+      - "${PLEX_WEB_BIND:-127.0.0.1}:1900:1900/udp"
+      - "${PLEX_WEB_BIND:-127.0.0.1}:3005:3005"
+      - "${PLEX_WEB_BIND:-127.0.0.1}:5353:5353/udp"
+      - "${PLEX_WEB_BIND:-127.0.0.1}:8324:8324"
+      - "${PLEX_WEB_BIND:-127.0.0.1}:32410:32410/udp"
+      - "${PLEX_WEB_BIND:-127.0.0.1}:32412:32412/udp"
+      - "${PLEX_WEB_BIND:-127.0.0.1}:32413:32413/udp"
+      - "${PLEX_WEB_BIND:-127.0.0.1}:32414:32414/udp"
+      - "${PLEX_WEB_BIND:-127.0.0.1}:32469:32469"
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: ${TIMEZONE:-Australia/Melbourne}
+      PLEX_CLAIM: ${PLEX_CLAIM:-}
+      VERSION: docker
+    volumes:
+      - ./data/plex/config:/config
+      - ./media:/media
+    networks:
+      - devnet
+
+  dockge:
+    image: louislam/dockge:latest
+    container_name: pi-dockge
+    restart: unless-stopped
+    profiles: ["extras"]
+    ports:
+      - "${DOCKGE_WEB_BIND:-127.0.0.1}:5001:5001"
+    environment:
+      DOCKGE_STACKS_DIR: /compose/stacks
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/dockge:/app/data
+      - ./data/dockge/stacks:/compose/stacks
+      - ./:/compose/stacks/pi-dev-stack
+    networks:
+      - devnet
+
 networks:
   devnet:
     name: pi-dev-stack

@@ -33,7 +33,7 @@ if ! $DOCKER_CMD ps >/dev/null 2>&1; then
 fi
 
 CORE_SERVICES="postgres redis n8n ollama open-webui portainer dozzle uptime-kuma homepage glances home-assistant pihole"
-EXTRA_SERVICES="watchtower traefik vaultwarden gitea minio syncthing filebrowser netdata prometheus grafana mosquitto nodered code-server"
+EXTRA_SERVICES="watchtower traefik vaultwarden gitea minio syncthing filebrowser netdata prometheus grafana mosquitto nodered code-server plex dockge"
 SERVICES="$CORE_SERVICES $EXTRA_SERVICES"
 LOCAL_CLI_DIR="${LOCAL_CLI_DIR:-local/cli.d}"
 

@@ -17,6 +17,7 @@ This repository gives you:
 - PostgreSQL and Redis infrastructure
 - network-wide ad blocking with Pi-hole
 - container management with Portainer
+- compose stack control with Dockge
 - logs dashboard with Dozzle
 - uptime monitoring with Uptime Kuma
 - system monitoring with Glances
@@ -26,6 +27,7 @@ This repository gives you:
 - private remote desktop access through Tailscale + VNC
 - backup and restore commands
 - local generated state separation for safe `git pull`
+- media streaming with Plex
 
 ## Included Services
 
@@ -50,6 +52,7 @@ This repository gives you:
 | Service | Purpose | Local URL |
 |---|---|---|
 | Portainer | Docker management dashboard | http://localhost:9000 |
+| Dockge | Docker Compose stack dashboard | http://localhost:5001 |
 | Dozzle | Real-time logs | http://localhost:9999 |
 | Uptime Kuma | Uptime monitoring | http://localhost:3001 |
 | Homepage | Homelab dashboard | http://localhost:8088 |
