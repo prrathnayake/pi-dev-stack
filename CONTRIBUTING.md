@@ -7,7 +7,7 @@ Thank you for contributing to Pi Dev Stack.
 ```bash
 git clone https://github.com/prrathnayake/pi-dev-stack.git
 cd pi-dev-stack
-chmod +x homelab pi-stack setup.sh stop.sh tunnel.sh validate.sh
+chmod +x homelab
 ```
 
 Run validation:

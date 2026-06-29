@@ -24,15 +24,11 @@ jobs:
 
       - name: Check shell scripts syntax
         run: |
-          bash -n setup.sh
-          bash -n tunnel.sh
-          bash -n validate.sh
-          bash -n stop.sh
-          bash -n pi-stack
           bash -n homelab
+          for f in lib/*.sh commands/*.sh; do bash -n "$f"; done
 
       - name: Ensure executables
-        run: chmod +x setup.sh stop.sh tunnel.sh validate.sh pi-stack homelab
+        run: chmod +x homelab
 
       - name: Test homelab help
         run: |
@@ -111,7 +107,7 @@ jobs:
 
       - name: Test homelab commands against live stack
         run: |
-          chmod +x homelab pi-stack
+          chmod +x homelab
           ./homelab status || true
           ./homelab doctor || true
           ./homelab urls || true

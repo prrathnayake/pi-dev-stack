@@ -1,0 +1,28 @@
+#name|profile|group|port|scheme|path|aliases|tunnel|tunnel_groups|url_note
+postgres|core|infra|5432|http|||no||PostgreSQL: localhost:5432 inside Docker network unless exposed
+redis|core|infra|6379|http|||no||Redis: localhost:6379 inside Docker network unless exposed
+n8n|core|automation|5678|http|/||yes|core,automation|
+ollama|core|ai|11434|http|||no||Ollama API: http://localhost:11434
+open-webui|core|ai|3000|http||webui|yes|core,ai|
+portainer|core|ops|9000|http|||yes|core,ops|
+dozzle|core|ops|9999|http||logs|yes|monitoring,ops|
+uptime-kuma|core|ops|3001|http||uptime,status|yes|monitoring,ops|
+homepage|core|ops|8088|http||home|yes|core,monitoring|
+glances|core|ops|61208|http|||yes|monitoring,ops|
+home-assistant|core|automation|8123|http||ha|yes||
+pihole|core|security|8081|http|/admin|pi-hole|yes|security|
+watchtower|extras|ops||http|||no||Watchtower has no web UI. Use: homelab watchtower logs
+traefik|extras|ops|8082|http||proxy|yes|ops|
+vaultwarden|extras|security|8083|http||vault|yes|security|
+gitea|extras|dev|3002|http|/|git|yes|dev|
+minio|extras|storage|9001|http|||yes|storage|MinIO Console: http://localhost:9001 (API: http://localhost:9002)
+syncthing|extras|storage|8384|http||sync|yes|storage|
+filebrowser|extras|storage|8084|http||files|yes|storage,dev|
+netdata|extras|monitoring|19999|http|||yes|monitoring|
+prometheus|extras|monitoring|9090|http|||yes|monitoring|
+grafana|extras|monitoring|3003|http|||yes|monitoring|
+mosquitto|extras|infra|1883|http|||no||Mosquitto MQTT: localhost:1883
+nodered|extras|automation|1880|http||node-red|yes|automation|
+code-server|extras|dev|8443|https||code|yes|dev|
+plex|extras|media|32400|http|/web||yes|media|
+dockge|extras|ops|5001|http|||yes|ops|

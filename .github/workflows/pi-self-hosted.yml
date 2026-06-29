@@ -16,10 +16,7 @@ jobs:
         run: cp .env.example .env
 
       - name: Ensure scripts executable
-        run: |
-          chmod +x setup.sh
-          chmod +x tunnel.sh
-          chmod +x validate.sh
+        run: chmod +x homelab
 
       - name: Validate compose
         run: docker compose config
@@ -52,22 +49,23 @@ jobs:
 
       - name: Start tunnels
         run: |
-          nohup ./tunnel.sh > tunnel-test.log 2>&1 &
+          chmod +x homelab
+          nohup ./homelab tunnel core > tunnel-test.log 2>&1 &
           sleep 20
 
       - name: Verify Cloudflare URLs generated
         run: |
-          grep trycloudflare logs/n8n.log
-          grep trycloudflare logs/open-webui.log
-          grep trycloudflare logs/portainer.log
+          grep trycloudflare logs/tunnel-n8n.log
+          grep trycloudflare logs/tunnel-open-webui.log
+          grep trycloudflare logs/tunnel-portainer.log
 
       - name: Show logs on failure
         if: failure()
         run: |
           docker compose logs
-          cat logs/n8n.log || true
-          cat logs/open-webui.log || true
-          cat logs/portainer.log || true
+          cat logs/tunnel-n8n.log || true
+          cat logs/tunnel-open-webui.log || true
+          cat logs/tunnel-portainer.log || true
 
       - name: Cleanup
         if: always()

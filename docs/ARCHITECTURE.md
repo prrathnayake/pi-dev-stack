@@ -10,6 +10,41 @@ git pull
 
 All runtime-generated information, user configuration, and machine-specific state must be stored in ignored local folders.
 
+## CLI structure
+
+The `homelab` command is a modular bash CLI:
+
+```text
+homelab                  entry point — flag parsing, lib loading, dispatch
+lib/
+  output.sh              text + JSON output helpers
+  docker.sh              Docker command detection, compose helpers
+  registry.sh            service registry loader and query functions
+  system.sh              OS detection
+config/
+  services.tsv           service registry (single source of truth)
+commands/
+  up.sh    down.sh    restart.sh   status.sh   logs.sh
+  doctor.sh validate.sh backup.sh   update.sh   install.sh
+  tunnel.sh service.sh  pihole.sh   help.sh
+```
+
+### Service registry
+
+`config/services.tsv` is the single source of truth for service metadata.
+
+Pipe-delimited columns:
+
+```text
+name|profile|group|port|scheme|path|aliases|tunnel|tunnel_groups|url_note
+```
+
+Adding a new service to `docker-compose.yml` requires one additional line in the registry. The CLI automatically picks up the new service for `service list`, `url`, tunnel groups, and `homelab <service> <action>` aliases.
+
+### Local extensions
+
+User-defined commands can be added as scripts in `local/cli.d/*.sh`. These are sourced at startup and can define a `local_cli_command` function for custom dispatch.
+
 ## Runtime state folders
 
 ### state/
@@ -95,9 +130,6 @@ This is achieved by:
 
 ## Recommended future improvements
 
-- SQLite runtime metadata database
-- plugin system under local/plugins/
-- YAML-driven service registry
 - runtime event bus
 - background daemon mode
 - JSON API server for homelab CLI

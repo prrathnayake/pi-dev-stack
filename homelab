@@ -1,2 +1,80 @@
 #!/bin/bash
-exec ./pi-stack "$@"
+#
+# homelab — Pi Dev Stack CLI
+#
+# Modular entry point: sources lib/ and commands/ then dispatches.
+# Service metadata is driven by config/services.tsv (the registry).
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR" || exit 1
+
+# --- parse global flags ---
+OUTPUT_FORMAT="text"
+ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --json) OUTPUT_FORMAT="json" ;;
+    *) ARGS+=("$arg") ;;
+  esac
+done
+set -- "${ARGS[@]}"
+
+# --- source libraries ---
+. "$ROOT_DIR/lib/output.sh"
+. "$ROOT_DIR/lib/system.sh"
+. "$ROOT_DIR/lib/registry.sh"
+. "$ROOT_DIR/lib/docker.sh"
+
+# --- source commands ---
+for _cmdfile in "$ROOT_DIR"/commands/*.sh; do
+  [ -f "$_cmdfile" ] && . "$_cmdfile"
+done
+unset _cmdfile
+
+# --- local extensions ---
+LOCAL_CLI_DIR="${LOCAL_CLI_DIR:-local/cli.d}"
+load_local_cli_extensions() {
+  [ -d "$LOCAL_CLI_DIR" ] || return 0
+  local file
+  for file in "$LOCAL_CLI_DIR"/*.sh; do
+    [ -f "$file" ] || continue
+    . "$file"
+  done
+}
+load_local_cli_extensions
+
+# --- dispatch ---
+cmd="${1:-help}"
+[ $# -gt 0 ] && shift || true
+
+case "$cmd" in
+  help|--help|-h)   cmd_help "$@" ;;
+  up|start)         cmd_up "$@" ;;
+  start-all|extras) cmd_up --all ;;
+  down|stop)        cmd_down "$@" ;;
+  restart)          cmd_restart "$@" ;;
+  status|ps)        cmd_status "$@" ;;
+  logs)             cmd_logs "$@" ;;
+  doctor)           cmd_doctor "$@" ;;
+  validate)         cmd_validate "$@" ;;
+  install)          cmd_install "$@" ;;
+  install-global)   cmd_install --global ;;
+  update)           cmd_update "$@" ;;
+  backup)           cmd_backup "$@" ;;
+  restore)          cmd_restore "$@" ;;
+  tunnel)           cmd_tunnel "$@" ;;
+  urls)             cmd_urls "$@" ;;
+  service)          cmd_service "$@" ;;
+  pihole)           cmd_pihole "$@" ;;
+  *)
+    if is_service "$cmd"; then
+      service_alias "$cmd" "$@"
+    elif declare -F local_cli_command >/dev/null 2>&1 && local_cli_command "$cmd" "$@"; then
+      exit 0
+    else
+      log_error "Unknown command: $cmd"
+      log_info "Run: homelab help"
+      exit 1
+    fi
+    ;;
+esac
