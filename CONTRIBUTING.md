@@ -39,7 +39,8 @@ tui/.venv/bin/python -m tui
 Syntax check without installing deps:
 
 ```bash
-python3 -m py_compile tui/__main__.py tui/app.py tui/data.py tui/widgets/*.py
+python3 -m py_compile tui/__main__.py tui/app.py tui/data.py tui/theme.py
+for f in tui/components/*.py; do python3 -m py_compile "$f"; done
 ```
 
 Keep the MCP server safe by default:

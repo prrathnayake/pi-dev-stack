@@ -7,10 +7,13 @@ config/services.tsv, mirroring the semantics of lib/registry.sh.
 from __future__ import annotations
 
 import csv
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -364,8 +367,8 @@ def run_homelab(*args: str, timeout: int = 30) -> tuple[int, str, str]:
         return 1, "", str(e)
 
 
-def action(service: str, action_name: str) -> tuple[int, str, str]:
-    return run_homelab(service, action_name, timeout=60)
+def action(service: str, action_name: str, timeout: int = 60) -> tuple[int, str, str]:
+    return run_homelab(service, action_name, timeout=timeout)
 
 
 # ---------------------------------------------------------------------------
@@ -391,3 +394,214 @@ def log_stream(service: str, tail: int = 100) -> Iterator[str]:
     for line in proc.stdout:
         yield line.rstrip("\n")
     proc.wait()
+
+
+# ---------------------------------------------------------------------------
+# Docker event stream — real-time container state changes
+# ---------------------------------------------------------------------------
+
+@dataclass
+class DockerEvent:
+    type: str
+    action: str
+    container: str
+    service: str
+    status: str
+    timestamp: str
+
+    @property
+    def is_state_change(self) -> bool:
+        return self.action in ("start", "stop", "die", "pause", "unpause", "create", "destroy")
+
+
+def docker_events() -> Iterator[DockerEvent]:
+    """Stream docker events in real-time. Blocks until interrupted."""
+    if not docker_available():
+        return
+    try:
+        proc = subprocess.Popen(
+            docker_cmd() + ["events", "--format", "{{json .}}"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+        )
+    except subprocess.SubprocessError:
+        return
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        container_name = obj.get("Actor", {}).get("Attributes", {}).get("name", "")
+        yield DockerEvent(
+            type=obj.get("Type", ""),
+            action=obj.get("Action", ""),
+            container=container_name,
+            service=_match_service(container_name, ""),
+            status=obj.get("Actor", {}).get("Attributes", {}).get("state", ""),
+            timestamp=obj.get("Time", ""),
+        )
+    proc.wait()
+
+
+# ---------------------------------------------------------------------------
+# Image pull progress — parse docker pull output for layer progress
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PullLayer:
+    layer_id: str
+    status: str
+    current: int = 0
+    total: int = 0
+    completed: bool = False
+
+    @property
+    def percent(self) -> float | None:
+        if self.total > 0:
+            return (self.current / self.total) * 100
+        return None
+
+
+def pull_progress(service: str) -> Iterator[dict[str, PullLayer]]:
+    """Stream docker compose pull progress, yielding layer states."""
+    root = _repo_root()
+    compose = docker_cmd() + ["compose"]
+    for svc in load_registry():
+        if svc.name == service and svc.profile == "extras":
+            compose = docker_cmd() + ["compose", "--profile", "extras"]
+            break
+    try:
+        proc = subprocess.Popen(
+            compose + ["pull", service],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            cwd=str(root),
+        )
+    except subprocess.SubprocessError:
+        return
+    assert proc.stdout is not None
+    layers: dict[str, PullLayer] = {}
+    for line in proc.stdout:
+        line = line.strip()
+        if not line:
+            continue
+        _parse_pull_line(line, layers)
+        yield dict(layers)
+    proc.wait()
+
+
+def _parse_pull_line(line: str, layers: dict[str, PullLayer]) -> None:
+    if "Pulling from" in line or "Digest:" in line or "Status:" in line:
+        return
+    parts = line.split(":", 1)
+    if len(parts) < 2:
+        return
+    layer_id = parts[0].strip()
+    rest = parts[1].strip()
+    if "Pulling fs layer" in rest:
+        layers[layer_id] = PullLayer(layer_id=layer_id, status="Pulling fs layer")
+    elif "Waiting" in rest:
+        layers[layer_id] = PullLayer(layer_id=layer_id, status="Waiting")
+    elif "Downloading" in rest:
+        layers.setdefault(layer_id, PullLayer(layer_id=layer_id, status="Downloading"))
+        layers[layer_id].status = "Downloading"
+        _extract_progress(rest, layers[layer_id])
+    elif "Extracting" in rest:
+        layers.setdefault(layer_id, PullLayer(layer_id=layer_id, status="Extracting"))
+        layers[layer_id].status = "Extracting"
+        _extract_progress(rest, layers[layer_id])
+    elif "Download complete" in rest:
+        layers.setdefault(layer_id, PullLayer(layer_id=layer_id, status="Download complete"))
+        layers[layer_id].completed = True
+        layers[layer_id].status = "Download complete"
+    elif "Pull complete" in rest:
+        layers.setdefault(layer_id, PullLayer(layer_id=layer_id, status="Pull complete"))
+        layers[layer_id].completed = True
+        layers[layer_id].status = "Pull complete"
+    elif "Already exists" in rest:
+        layers[layer_id] = PullLayer(layer_id=layer_id, status="Already exists", completed=True)
+
+
+def _extract_progress(text: str, layer: PullLayer) -> None:
+    m = re.search(r'(\d+(?:\.\d+)?)\s*(B|kB|MB|GB)/(\d+(?:\.\d+)?)\s*(B|kB|MB|GB)', text)
+    if m:
+        current_val = float(m.group(1))
+        current_unit = m.group(2)
+        total_val = float(m.group(3))
+        total_unit = m.group(4)
+        multipliers = {"B": 1, "kB": 1024, "MB": 1024**2, "GB": 1024**3}
+        layer.current = int(current_val * multipliers.get(current_unit, 1))
+        layer.total = int(total_val * multipliers.get(total_unit, 1))
+
+
+# ---------------------------------------------------------------------------
+# Wait for container to reach running state
+# ---------------------------------------------------------------------------
+
+def wait_for_running(service: str, timeout: int = 60) -> bool:
+    """Poll until the service container is running. Returns True if running."""
+    container = f"pi-{service}"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            result = subprocess.run(
+                docker_cmd() + ["inspect", "-f", "{{.State.Status}}", container],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip() == "running":
+                return True
+        except subprocess.SubprocessError:
+            pass
+        time.sleep(0.5)
+    return False
+
+
+def container_state(service: str) -> str:
+    """Get the state of a single service container."""
+    container = f"pi-{service}"
+    try:
+        result = subprocess.run(
+            docker_cmd() + ["inspect", "-f", "{{.State.Status}}", container],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except subprocess.SubprocessError:
+        pass
+    return "missing"
+
+
+# ---------------------------------------------------------------------------
+# Action with pull progress — start a service, handling image downloads
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ActionResult:
+    success: bool
+    message: str
+    pulled: bool = False
+
+
+def start_service(service: str) -> ActionResult:
+    """Start a service, pulling images if needed. Returns result."""
+    if not is_service(service):
+        return ActionResult(False, f"Unknown service: {service}")
+    compose = docker_cmd() + ["compose"]
+    for svc in load_registry():
+        if svc.name == service and svc.profile == "extras":
+            compose = docker_cmd() + ["compose", "--profile", "extras"]
+            break
+    root = _repo_root()
+    try:
+        result = subprocess.run(
+            compose + ["up", "-d", service],
+            capture_output=True, text=True, timeout=120,
+            cwd=str(root),
+        )
+        if result.returncode == 0:
+            return ActionResult(True, f"Started {service}")
+        return ActionResult(False, f"Failed: {result.stderr.strip()[:200]}")
+    except subprocess.SubprocessError as e:
+        return ActionResult(False, f"Error: {e}")
