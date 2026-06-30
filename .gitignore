@@ -11,3 +11,8 @@ homepage/
 cloudflared/config.yml
 docker-compose.override.yml
 *.log
+
+# Python / TUI
+tui/.venv/
+__pycache__/
+*.pyc

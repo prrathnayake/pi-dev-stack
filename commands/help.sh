@@ -14,7 +14,7 @@ cmd_help() {
     core_json=$(core_services | json_string_array)
     extras_json=$(extra_services | json_string_array)
     groups_json=$(tunnel_groups_list | json_string_array)
-    printf '{"commands":["up","down","restart","status","logs","service","tunnel","urls","doctor","validate","install","update","backup","restore","pihole","help"],"core_services":%s,"extras_services":%s,"tunnel_groups":%s}\n' "$core_json" "$extras_json" "$groups_json"
+    printf '{"commands":["up","down","restart","status","logs","service","tunnel","urls","doctor","validate","install","update","backup","restore","pihole","tui","help"],"core_services":%s,"extras_services":%s,"tunnel_groups":%s}\n' "$core_json" "$extras_json" "$groups_json"
     return
   fi
 
@@ -53,6 +53,9 @@ System:
 
 Domain:
   homelab pihole <action>     Pi-hole specific commands
+
+Monitoring:
+  homelab tui                 Interactive TUI (containers, system, logs, registry)
 
 Direct service alias:
   homelab n8n start           Same as: homelab service start n8n
@@ -110,6 +113,7 @@ EOF
     backup)   cmd_backup --help ;;
     restore)  echo "homelab restore <file> — restore from a backup tarball"; ;;
     pihole)   cmd_pihole --help ;;
+    tui)      cmd_tui --help ;;
     *) echo "No help for: $1"; echo "Run: homelab help"; return 1 ;;
   esac
 }

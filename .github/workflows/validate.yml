@@ -24,6 +24,13 @@ jobs:
           shellcheck homelab || true
           for f in lib/*.sh commands/*.sh; do shellcheck "$f" || true; done
 
+      - name: Validate TUI Python syntax
+        run: |
+          python3 -m py_compile tui/__main__.py
+          python3 -m py_compile tui/app.py
+          python3 -m py_compile tui/data.py
+          for f in tui/widgets/*.py; do python3 -m py_compile "$f"; done
+
       - name: Validate executable permissions
         run: |
           test -x homelab || chmod +x homelab

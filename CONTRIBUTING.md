@@ -26,6 +26,22 @@ npm run build
 npm test
 ```
 
+## TUI development
+
+The TUI is a Python package under `tui/` using the Textual framework.
+
+```bash
+python3 -m venv tui/.venv
+tui/.venv/bin/pip install -r tui/requirements.txt
+tui/.venv/bin/python -m tui
+```
+
+Syntax check without installing deps:
+
+```bash
+python3 -m py_compile tui/__main__.py tui/app.py tui/data.py tui/widgets/*.py
+```
+
 Keep the MCP server safe by default:
 
 - do not expose arbitrary shell commands

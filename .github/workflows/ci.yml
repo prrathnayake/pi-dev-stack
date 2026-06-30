@@ -27,6 +27,13 @@ jobs:
           bash -n homelab
           for f in lib/*.sh commands/*.sh; do bash -n "$f"; done
 
+      - name: Check TUI Python syntax
+        run: |
+          python3 -m py_compile tui/__main__.py
+          python3 -m py_compile tui/app.py
+          python3 -m py_compile tui/data.py
+          for f in tui/widgets/*.py; do python3 -m py_compile "$f"; done
+
       - name: Ensure executables
         run: chmod +x homelab
 

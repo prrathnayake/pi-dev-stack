@@ -66,6 +66,7 @@ case "$cmd" in
   urls)             cmd_urls "$@" ;;
   service)          cmd_service "$@" ;;
   pihole)           cmd_pihole "$@" ;;
+  tui)              cmd_tui "$@" ;;
   *)
     if is_service "$cmd"; then
       service_alias "$cmd" "$@"

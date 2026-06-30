@@ -26,7 +26,12 @@ config/
 commands/
   up.sh    down.sh    restart.sh   status.sh   logs.sh
   doctor.sh validate.sh backup.sh   update.sh   install.sh
-  tunnel.sh service.sh  pihole.sh   help.sh
+  tunnel.sh service.sh  pihole.sh   help.sh     tui.sh
+tui/                      Textual-based monitoring TUI (Python)
+  __main__.py  app.py  data.py
+  widgets/
+    container_table.py  system_panel.py  log_viewer.py  registry_view.py
+  requirements.txt        textual, psutil (installed into tui/.venv on first run)
 ```
 
 ### Service registry

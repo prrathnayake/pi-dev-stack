@@ -60,6 +60,7 @@ homelab <service> <action>
 | Code Server | [code-server.md](code-server.md) |
 | Plex | [plex.md](plex.md) |
 | Dockge | [dockge.md](dockge.md) |
+| homelab tui | [tui.md](tui.md) |
 
 ## Extra Profile Services
 
