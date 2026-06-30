@@ -1,13 +1,15 @@
 """Orange-tinted log panel with service selector and streaming."""
 from __future__ import annotations
 
-import threading
 from typing import Optional
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import Button, RichLog, Static, Label
+from textual.widgets import Button, RichLog, Static
 from textual.message import Message
+from textual.worker import Worker
+
+from ..data import iter_process_lines, open_log_process, terminate_process
 
 
 class LogPanel(Horizontal):
@@ -85,8 +87,9 @@ class LogPanel(Horizontal):
 
     def __init__(self) -> None:
         super().__init__()
-        self._stream_thread: Optional[threading.Thread] = None
-        self._stream_stop = threading.Event()
+        self._stream_worker: Optional[Worker] = None
+        self._stream_proc = None
+        self._stream_generation = 0
         self._current_service: str | None = None
 
     def compose(self) -> ComposeResult:
@@ -123,32 +126,60 @@ class LogPanel(Horizontal):
         self._stop_stream()
         if not self._current_service:
             return
-        self._stream_stop.clear()
         log = self.query_one("#log-output", RichLog)
         log.clear()
         status = self.query_one("#log-status", Static)
         status.update(f"[$accent]Streaming:[/] {self._current_service}")
         svc = self._current_service
-
-        from ..data import log_stream
+        self._stream_generation += 1
+        generation = self._stream_generation
 
         def _stream() -> None:
-            for line in log_stream(svc):
-                if self._stream_stop.is_set():
+            proc = open_log_process(svc)
+            if proc is None:
+                self.app.call_from_thread(self._stream_failed, generation, svc)
+                return
+            self.app.call_from_thread(self._set_stream_process, generation, proc)
+            for line in iter_process_lines(proc):
+                if generation != self._stream_generation:
                     break
                 try:
-                    self.app.call_from_thread(log.write, line)
+                    self.app.call_from_thread(self._write_log_line, generation, line)
                 except Exception:
                     break
 
-        self._stream_thread = threading.Thread(target=_stream, daemon=True)
-        self._stream_thread.start()
+        self._stream_worker = self.run_worker(
+            _stream,
+            name=f"log-stream-{svc}",
+            group="log-stream",
+            exclusive=True,
+            thread=True,
+            exit_on_error=False,
+        )
+
+    def _set_stream_process(self, generation: int, proc) -> None:
+        if generation != self._stream_generation:
+            terminate_process(proc)
+            return
+        self._stream_proc = proc
+
+    def _write_log_line(self, generation: int, line: str) -> None:
+        if generation != self._stream_generation:
+            return
+        self.query_one("#log-output", RichLog).write(line)
+
+    def _stream_failed(self, generation: int, service: str) -> None:
+        if generation == self._stream_generation:
+            self.query_one("#log-status", Static).update(f"Unable to stream logs for {service}")
 
     def _stop_stream(self) -> None:
-        self._stream_stop.set()
-        if self._stream_thread and self._stream_thread.is_alive():
-            self._stream_thread.join(timeout=2)
-        self._stream_thread = None
+        self._stream_generation += 1
+        if self._stream_worker is not None:
+            self._stream_worker.cancel()
+            self._stream_worker = None
+        if self._stream_proc is not None:
+            terminate_process(self._stream_proc)
+            self._stream_proc = None
 
     def clear_log(self) -> None:
         self.query_one("#log-output", RichLog).clear()

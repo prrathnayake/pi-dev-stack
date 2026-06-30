@@ -63,6 +63,44 @@ def docker_available() -> bool:
         return False
 
 
+_SYSTEM_STATS_PRIMED = False
+_HOST_METADATA: tuple[str, str] | None = None
+
+
+def prime_system_stats() -> None:
+    """Prime psutil CPU counters without blocking the UI."""
+    global _SYSTEM_STATS_PRIMED
+    if _SYSTEM_STATS_PRIMED:
+        return
+    try:
+        import psutil
+
+        psutil.cpu_percent(interval=None)
+        psutil.cpu_percent(interval=None, percpu=True)
+    except Exception:
+        pass
+    _SYSTEM_STATS_PRIMED = True
+
+
+def _host_metadata() -> tuple[str, str]:
+    global _HOST_METADATA
+    if _HOST_METADATA is not None:
+        return _HOST_METADATA
+
+    hostname = os.uname().nodename
+    os_name = ""
+    try:
+        with open("/etc/os-release", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("PRETTY_NAME="):
+                    os_name = line.split("=", 1)[1].strip().strip('"')
+                    break
+    except (FileNotFoundError, OSError):
+        pass
+    _HOST_METADATA = (hostname, os_name)
+    return _HOST_METADATA
+
+
 # ---------------------------------------------------------------------------
 # Service registry
 # ---------------------------------------------------------------------------
@@ -122,6 +160,10 @@ def service_names() -> list[str]:
     return [s.name for s in load_registry()]
 
 
+def is_service(name: str) -> bool:
+    return name in service_names()
+
+
 def core_services() -> list[str]:
     return [s.name for s in load_registry() if s.profile == "core"]
 
@@ -156,9 +198,7 @@ def _match_service(container_name: str, image: str) -> str:
     return container_name
 
 
-def containers() -> list[ContainerStatus]:
-    if not docker_available():
-        return []
+def _containers_from_docker() -> list[ContainerStatus]:
     try:
         result = subprocess.run(
             docker_cmd() + ["compose", "--profile", "extras", "ps", "--format", "json"],
@@ -194,6 +234,12 @@ def containers() -> list[ContainerStatus]:
     return containers_list
 
 
+def containers() -> list[ContainerStatus]:
+    if not docker_available():
+        return []
+    return _containers_from_docker()
+
+
 # ---------------------------------------------------------------------------
 # Container resource usage
 # ---------------------------------------------------------------------------
@@ -208,9 +254,7 @@ class ContainerStats:
     block_io: str
 
 
-def container_stats() -> dict[str, ContainerStats]:
-    if not docker_available():
-        return {}
+def _container_stats_from_docker() -> dict[str, ContainerStats]:
     try:
         result = subprocess.run(
             docker_cmd() + ["stats", "--no-stream", "--format",
@@ -236,6 +280,32 @@ def container_stats() -> dict[str, ContainerStats]:
             block_io=parts[5],
         )
     return stats
+
+
+def container_stats() -> dict[str, ContainerStats]:
+    if not docker_available():
+        return {}
+    return _container_stats_from_docker()
+
+
+@dataclass(frozen=True)
+class DockerSnapshot:
+    statuses: dict[str, ContainerStatus]
+    stats: dict[str, ContainerStats]
+    available: bool
+    error: str | None = None
+
+
+def docker_snapshot() -> DockerSnapshot:
+    """Fetch container status and stats with one Docker availability check."""
+    if not docker_available():
+        return DockerSnapshot(statuses={}, stats={}, available=False)
+    try:
+        statuses = {c.service: c for c in _containers_from_docker()}
+        stats = _container_stats_from_docker()
+    except Exception as e:
+        return DockerSnapshot(statuses={}, stats={}, available=False, error=str(e))
+    return DockerSnapshot(statuses=statuses, stats=stats, available=True)
 
 
 # ---------------------------------------------------------------------------
@@ -271,10 +341,11 @@ def system_stats() -> SystemStats:
     except ImportError:
         return SystemStats(cpu_percent=0.0, cpu_count=0, hostname=os.uname().nodename)
 
-    cpu_percent = psutil.cpu_percent(interval=0.5)
+    prime_system_stats()
+    cpu_percent = psutil.cpu_percent(interval=None)
     cpu_count = psutil.cpu_count() or 0
     try:
-        cpu_per_core = psutil.cpu_percent(interval=0.3, percpu=True)
+        cpu_per_core = psutil.cpu_percent(interval=None, percpu=True)
     except Exception:
         cpu_per_core = []
 
@@ -315,16 +386,7 @@ def system_stats() -> SystemStats:
     except Exception:
         pass
 
-    hostname = os.uname().nodename
-    os_name = ""
-    try:
-        with open("/etc/os-release", encoding="utf-8") as f:
-            for line in f:
-                if line.startswith("PRETTY_NAME="):
-                    os_name = line.split("=", 1)[1].strip().strip('"')
-                    break
-    except (FileNotFoundError, OSError):
-        pass
+    hostname, os_name = _host_metadata()
 
     return SystemStats(
         cpu_percent=cpu_percent,
@@ -375,7 +437,7 @@ def action(service: str, action_name: str, timeout: int = 60) -> tuple[int, str,
 # Log streaming
 # ---------------------------------------------------------------------------
 
-def log_stream(service: str, tail: int = 100) -> Iterator[str]:
+def open_log_process(service: str, tail: int = 100) -> subprocess.Popen[str] | None:
     root = _repo_root()
     compose = docker_cmd() + ["compose"]
     for svc in load_registry():
@@ -383,17 +445,38 @@ def log_stream(service: str, tail: int = 100) -> Iterator[str]:
             compose = docker_cmd() + ["compose", "--profile", "extras"]
             break
     try:
-        proc = subprocess.Popen(
+        return subprocess.Popen(
             compose + ["logs", "-f", "--tail", str(tail), service],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
             cwd=str(root),
         )
     except subprocess.SubprocessError:
+        return None
+
+
+def terminate_process(proc: subprocess.Popen[str], timeout: float = 1.0) -> None:
+    if proc.poll() is not None:
         return
+    proc.terminate()
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=timeout)
+
+
+def iter_process_lines(proc: subprocess.Popen[str]) -> Iterator[str]:
     assert proc.stdout is not None
     for line in proc.stdout:
         yield line.rstrip("\n")
     proc.wait()
+
+
+def log_stream(service: str, tail: int = 100) -> Iterator[str]:
+    proc = open_log_process(service, tail)
+    if proc is None:
+        return
+    yield from iter_process_lines(proc)
 
 
 # ---------------------------------------------------------------------------

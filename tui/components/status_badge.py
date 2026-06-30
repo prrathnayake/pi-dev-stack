@@ -1,6 +1,7 @@
 """Status badge — animated indicator for container state."""
 from __future__ import annotations
 
+from textual.timer import Timer
 from textual.widgets import Static
 from textual.reactive import reactive
 
@@ -39,6 +40,7 @@ class StatusBadge(Static):
     def __init__(self, state: str = "stopped", id: str | None = None) -> None:
         super().__init__(id=id)
         self._frame = 0
+        self._animation_timer: Timer | None = None
         self.state = state
 
     def watch_state(self, state: str) -> None:
@@ -54,6 +56,7 @@ class StatusBadge(Static):
         else:
             self.add_class("-stopped")
         self._update_render()
+        self._sync_animation(state)
 
     def _update_render(self) -> None:
         icons = {
@@ -73,8 +76,17 @@ class StatusBadge(Static):
 
     def on_mount(self) -> None:
         self._update_render()
-        if self.state in ("running", "pulling"):
-            self.set_interval(0.8, self._animate)
+        self._sync_animation(self.state)
+
+    def _sync_animation(self, state: str) -> None:
+        if not self.is_mounted:
+            return
+        if state in ("running", "pulling"):
+            if self._animation_timer is None:
+                self._animation_timer = self.set_interval(0.8, self._animate)
+        elif self._animation_timer is not None:
+            self._animation_timer.stop()
+            self._animation_timer = None
 
     def _animate(self) -> None:
         if self.state in ("running", "pulling"):

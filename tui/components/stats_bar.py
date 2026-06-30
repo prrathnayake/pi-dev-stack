@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 from textual.widgets import Static
-from textual.reactive import reactive
 
-from ..data import system_stats
+from ..data import SystemStats
 
 
 def _fmt_bytes(n: int) -> str:
@@ -28,12 +27,8 @@ class StatsBar(Static):
     }
     """
 
-    def on_mount(self) -> None:
-        self.refresh_stats()
-        self.set_interval(1.5, self.refresh_stats)
-
-    def refresh_stats(self) -> None:
-        s = system_stats()
+    def update_stats(self, stats: SystemStats) -> None:
+        s = stats
         parts = []
         parts.append(f"CPU [$accent]{s.cpu_percent:.0f}%[/]")
         parts.append(f"MEM [$accent]{s.mem_percent:.0f}%[/]")
