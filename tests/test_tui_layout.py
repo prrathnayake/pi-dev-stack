@@ -10,15 +10,15 @@ class LayoutComponentTests(unittest.TestCase):
         from tui.components.side_panel import SidePanel
 
         panel = SidePanel()
-        self.assertEqual(panel.active, "Containers")
-        self.assertIn("homelab", panel.logo_text.lower())
+        self.assertEqual(panel.active, "Dashboard")
+        self.assertFalse(hasattr(panel, "logo_text"))
 
-        panel._buttons = {"Containers": mock.Mock(), "System": mock.Mock()}
-        panel.set_active("System")
+        panel._buttons = {"Dashboard": mock.Mock(), "Services": mock.Mock()}
+        panel.set_active("Services")
 
-        panel._buttons["System"].add_class.assert_called_once_with("-active")
-        panel._buttons["Containers"].remove_class.assert_called_once_with("-active")
-        self.assertEqual(panel.active, "System")
+        panel._buttons["Services"].add_class.assert_called_once_with("-active")
+        panel._buttons["Dashboard"].remove_class.assert_called_once_with("-active")
+        self.assertEqual(panel.active, "Services")
 
     def test_action_bar_includes_menu_action_for_small_screens(self) -> None:
         from tui.components.action_bar import ActionBar

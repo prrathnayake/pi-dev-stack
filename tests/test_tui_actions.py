@@ -94,16 +94,16 @@ class ActionFlowTests(unittest.TestCase):
     def test_show_logs_switches_page_and_selects_service(self) -> None:
         from tui.app import HomelabTui
 
-        log_panel = mock.Mock()
+        activities = mock.Mock()
         app = HomelabTui()
         app._get_selected_service = mock.Mock(return_value="web")  # type: ignore[method-assign]
         app._switch_page = mock.Mock()  # type: ignore[method-assign]
-        app.query_one = mock.Mock(return_value=log_panel)  # type: ignore[method-assign]
+        app.query_one = mock.Mock(return_value=activities)  # type: ignore[method-assign]
 
         app._show_logs()
 
-        app._switch_page.assert_called_once_with("Logs")
-        log_panel.select_service.assert_called_once_with("web")
+        app._switch_page.assert_called_once_with("Activities")
+        activities.select_service.assert_called_once_with("web")
 
     def test_show_url_dialog_branches(self) -> None:
         from tui.app import HomelabTui
@@ -162,13 +162,15 @@ class ActionFlowTests(unittest.TestCase):
         app.query_one = mock.Mock(side_effect=[stats_bar, dashboard])  # type: ignore[method-assign]
         app._apply_system_stats(stats)
         stats_bar.update_stats.assert_called_once_with(stats)
-        dashboard.update_stats.assert_called_once_with(stats)
+        dashboard.update_system.assert_called_once_with(stats)
 
-        grid = mock.Mock()
+        dashboard = mock.Mock()
+        services = mock.Mock()
         snapshot = DockerSnapshot({}, {}, True)
-        app.query_one = mock.Mock(return_value=grid)  # type: ignore[method-assign]
+        app.query_one = mock.Mock(side_effect=[dashboard, services])  # type: ignore[method-assign]
         app._apply_docker_snapshot(snapshot)
-        grid.update_snapshot.assert_called_once_with(snapshot)
+        dashboard.update_docker.assert_called_once_with(snapshot)
+        services.update_snapshot.assert_called_once_with(snapshot)
 
     def test_load_workers_call_back_to_ui_thread(self) -> None:
         from tui.app import HomelabTui
@@ -209,21 +211,21 @@ class ActionFlowTests(unittest.TestCase):
     def test_selected_service_and_cleanup_paths(self) -> None:
         from tui.app import HomelabTui
         from tui.components.log_panel import LogPanel
-        from tui.components.service_grid import ServiceGrid
+        from tui.components.services_page import ServicesPage
 
         app = HomelabTui()
-        app.on_service_grid_service_selected(ServiceGrid.ServiceSelected("web"))
+        app.on_services_page_service_selected(ServicesPage.ServiceSelected("web"))
         self.assertEqual(app._selected_service, "web")
         app.on_log_panel_service_log_selected(LogPanel.ServiceLogSelected("db"))
         self.assertEqual(app._selected_service, "db")
 
-        app._active_page = "System"
+        app._active_page = "Dashboard"
         self.assertEqual(app._get_selected_service(), "db")
 
         timer = mock.Mock()
-        app._system_timer = app._docker_timer = app._docker_reconcile_timer = timer
+        app._system_timer = app._docker_timer = app._docker_reconcile_timer = app._idle_timer = timer
         app.on_unmount()
-        self.assertEqual(timer.stop.call_count, 3)
+        self.assertEqual(timer.stop.call_count, 4)
 
     def test_page_switch_and_action_message_wrappers(self) -> None:
         from tui.app import HomelabTui
@@ -236,16 +238,16 @@ class ActionFlowTests(unittest.TestCase):
         content.children = [child]
         page = mock.Mock()
         app.query_one = mock.Mock(side_effect=[panel, content, page])  # type: ignore[method-assign]
-        app._switch_page("System")
-        panel.set_active.assert_called_once_with("System")
+        app._switch_page("Services")
+        panel.set_active.assert_called_once_with("Services")
         child.remove_class.assert_called_once_with("-visible")
         page.add_class.assert_called_once_with("-visible")
 
         app._switch_page = mock.Mock()  # type: ignore[method-assign]
-        app.action_switch_page("Logs")
-        app._switch_page.assert_called_once_with("Logs")
-        app.on_side_panel_page_selected(SidePanel.PageSelected("Registry"))
-        app._switch_page.assert_called_with("Registry")
+        app.action_switch_page("Activities")
+        app._switch_page.assert_called_once_with("Activities")
+        app.on_side_panel_page_selected(SidePanel.PageSelected("Dashboard"))
+        app._switch_page.assert_called_with("Dashboard")
 
         app._handle_action = mock.Mock()  # type: ignore[method-assign]
         app.on_action_bar_action_triggered(mock.Mock(action="start"))
@@ -254,21 +256,22 @@ class ActionFlowTests(unittest.TestCase):
 
         app._switch_page = HomelabTui._switch_page.__get__(app, HomelabTui)  # type: ignore[method-assign]
         app.query_one = mock.Mock(side_effect=[panel, content, Exception("missing")])  # type: ignore[method-assign]
-        app._switch_page("System")
+        app._switch_page("Services")
 
     def test_debounce_and_loading_overlay_branches(self) -> None:
         from tui.app import HomelabTui
 
         app = HomelabTui()
         timer = mock.Mock()
-        app._docker_reconcile_timer = timer
-        app._schedule_debounced_docker_refresh()
-        timer.reset.assert_called_once_with()
+        with mock.patch.object(HomelabTui, "is_running", new_callable=mock.PropertyMock, return_value=True):
+            app._docker_reconcile_timer = timer
+            app._schedule_debounced_docker_refresh()
+            timer.reset.assert_called_once_with()
 
-        app._docker_reconcile_timer = None
-        app.set_timer = mock.Mock(return_value=timer)  # type: ignore[method-assign]
-        app._schedule_debounced_docker_refresh()
-        self.assertIs(app._docker_reconcile_timer, timer)
+            app._docker_reconcile_timer = None
+            app.set_timer = mock.Mock(return_value=timer)  # type: ignore[method-assign]
+            app._schedule_debounced_docker_refresh()
+            self.assertIs(app._docker_reconcile_timer, timer)
 
         app._schedule_docker_refresh = mock.Mock()  # type: ignore[method-assign]
         app._run_debounced_docker_refresh()
@@ -288,9 +291,9 @@ class ActionFlowTests(unittest.TestCase):
         from tui.data import DockerEvent
 
         app = HomelabTui()
-        grid = mock.Mock(selected_service="web")
-        app._active_page = "Containers"
-        app.query_one = mock.Mock(return_value=grid)  # type: ignore[method-assign]
+        services = mock.Mock(selected_service="web")
+        app._active_page = "Services"
+        app.query_one = mock.Mock(return_value=services)  # type: ignore[method-assign]
         self.assertEqual(app._get_selected_service(), "web")
 
         app._selected_service = "cached"

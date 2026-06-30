@@ -42,11 +42,11 @@ class ComponentBehaviorTests(unittest.TestCase):
         panel = SidePanel()
         panel.post_message = mock.Mock()  # type: ignore[method-assign]
         event = mock.Mock()
-        event.button.id = "side-system"
+        event.button.id = "side-services"
         panel.on_button_pressed(event)
 
-        self.assertEqual(panel.active, "System")
-        self.assertEqual(panel.post_message.call_args.args[0].page, "System")
+        self.assertEqual(panel.active, "Services")
+        self.assertEqual(panel.post_message.call_args.args[0].page, "Services")
 
     def test_service_card_update_branches_and_clicks(self) -> None:
         from tui.components.service_card import ServiceCard

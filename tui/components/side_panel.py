@@ -22,16 +22,10 @@ class SidePanel(Vertical):
     SidePanel.-collapsed {
         display: none;
     }
-    SidePanel .side-logo {
-        height: 3;
-        color: $accent;
-        text-style: bold;
-        padding: 0 0 1 0;
-    }
     SidePanel .side-section {
         height: 1;
         color: $text-disabled;
-        padding: 1 0 0 0;
+        padding: 0 0 1 0;
     }
     SidePanel .side-item {
         width: 100%;
@@ -60,7 +54,7 @@ class SidePanel(Vertical):
     }
     """
 
-    PAGES = ("Containers", "System", "Logs", "Registry")
+    PAGES = ("Dashboard", "Services", "Activities")
 
     class PageSelected(Message):
         def __init__(self, page: str) -> None:
@@ -69,19 +63,14 @@ class SidePanel(Vertical):
 
     def __init__(self) -> None:
         super().__init__()
-        self._active = "Containers"
+        self._active = "Dashboard"
         self._buttons: dict[str, Button] = {}
-
-    @property
-    def logo_text(self) -> str:
-        return "π homelab\nPi Dev Stack"
 
     @property
     def active(self) -> str:
         return self._active
 
     def compose(self) -> ComposeResult:
-        yield Static(self.logo_text, classes="side-logo")
         yield Static("MAIN MENU", classes="side-section")
         for page in self.PAGES:
             button = Button(page, id=f"side-{page.lower()}", classes="side-item")
