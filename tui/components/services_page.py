@@ -51,9 +51,23 @@ class ServicesPage(VerticalScroll):
     ServicesPage .svc-action {
         width: 1fr;
         min-width: 7;
-        height: 2;
+        height: 1;
         margin: 0;
-        border: solid $border-blurred;
+        color: $background;
+        background: $accent;
+        border: none;
+        text-style: bold;
+        content-align: center middle;
+    }
+    ServicesPage .svc-action:hover {
+        color: $background;
+        background: $primary;
+        border: none;
+    }
+    ServicesPage .svc-action:focus {
+        color: $background;
+        background: $primary;
+        border: none;
     }
     """
 
