@@ -2,17 +2,15 @@
 
 Features:
 - Custom orange theme (pi-orange)
-- pyfiglet ASCII banner with orange gradient
 - One-line live system stats (always visible)
-- Clickable menu bar for page switching (touch-friendly)
+- Toggleable side menu for page switching (touch-friendly)
 - Clickable action bar for service control (touch-friendly)
-- Clickable service cards in a scrollable grid
+- Dashboard, services management, and activities/log monitoring pages
 - Real-time Docker event stream for instant state updates
-- Live container resource stats (2s poll)
+- Live Docker status and resource stats (2.5s poll)
 - Live system stats (1.5s poll)
+- Full-screen idle logo after inactivity
 - Animated loading spinner during actions
-- Docker pull progress with per-layer bars
-- Custom-styled log viewer and registry browser
 """
 from __future__ import annotations
 
@@ -382,7 +380,6 @@ class HomelabTui(App):
         self._switch_page("Activities")
         try:
             self.query_one(ActivitiesPage).select_service(svc)
-            self._append_activity(ActivityEvent("logs", svc, "Live log monitor selected"))
         except Exception:
             pass
 
@@ -533,7 +530,7 @@ class HomelabTui(App):
             "  [bold]l[/]  Jump to logs\n"
             "  [bold]?[/]  This help\n"
             "  [bold]q[/]  Quit\n\n"
-            "  Touch: tap menu items, action buttons, and service cards"
+            "  Touch: tap menu items, service action buttons, and log selectors"
         )
         self._show_dialog("Help", help_text)
 

@@ -99,11 +99,13 @@ class ActionFlowTests(unittest.TestCase):
         app._get_selected_service = mock.Mock(return_value="web")  # type: ignore[method-assign]
         app._switch_page = mock.Mock()  # type: ignore[method-assign]
         app.query_one = mock.Mock(return_value=activities)  # type: ignore[method-assign]
+        app._append_activity = mock.Mock()  # type: ignore[method-assign]
 
         app._show_logs()
 
         app._switch_page.assert_called_once_with("Activities")
         activities.select_service.assert_called_once_with("web")
+        app._append_activity.assert_not_called()
 
     def test_show_url_dialog_branches(self) -> None:
         from tui.app import HomelabTui
