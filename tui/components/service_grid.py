@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.containers import VerticalScroll, Horizontal
+from textual.containers import VerticalScroll
 from textual.message import Message
-from textual.widgets import Static
 
 from .service_card import ServiceCard
-from ..data import load_registry, containers, container_stats
+from ..data import DockerSnapshot, load_registry
 
 
 class ServiceGrid(VerticalScroll):
@@ -16,15 +15,6 @@ class ServiceGrid(VerticalScroll):
     DEFAULT_CSS = """
     ServiceGrid {
         padding: 1 1;
-    }
-    ServiceGrid > .grid-row {
-        height: auto;
-        padding: 0 0 1 0;
-    }
-    ServiceGrid > #grid-empty {
-        padding: 2 2;
-        color: $text-muted;
-        text-align: center;
     }
     """
 
@@ -40,33 +30,17 @@ class ServiceGrid(VerticalScroll):
 
     def compose(self) -> ComposeResult:
         registry = load_registry()
-        row: list[ServiceCard] = []
-        cards_per_row = 3
 
         for svc in registry:
             card = ServiceCard(service_name=svc.name)
             card.port = svc.port
             card.profile = svc.profile
             self._cards[svc.name] = card
-            row.append(card)
-            if len(row) >= cards_per_row:
-                with Horizontal(classes="grid-row"):
-                    for c in row:
-                        yield c
-                row = []
+            yield card
 
-        if row:
-            with Horizontal(classes="grid-row"):
-                for c in row:
-                    yield c
-
-    def on_mount(self) -> None:
-        self.refresh_data()
-        self.set_interval(2.5, self.refresh_data)
-
-    def refresh_data(self) -> None:
-        running = {c.service: c for c in containers()}
-        stats = container_stats()
+    def update_snapshot(self, snapshot: DockerSnapshot) -> None:
+        running = snapshot.statuses
+        stats = snapshot.stats
         registry = {s.name: s for s in load_registry()}
 
         for name, card in self._cards.items():
@@ -84,6 +58,11 @@ class ServiceGrid(VerticalScroll):
             port = svc.port if svc else ""
             profile = svc.profile if svc else ""
             card.update_state(state, port, uptime, cpu, mem, profile)
+
+    def refresh_data(self) -> None:
+        from ..data import docker_snapshot
+
+        self.update_snapshot(docker_snapshot())
 
     def on_service_card_card_clicked(self, event: ServiceCard.CardClicked) -> None:
         self.select_service(event.service)
@@ -107,5 +86,4 @@ class ServiceGrid(VerticalScroll):
         """Called from docker event stream — update a single card."""
         card = self._cards.get(service)
         if card:
-            current = card.state
-            card.update_state(state, card.port, "", card.cpu, card.mem, card.profile)
+            card.update_state(state, card.port, card.uptime, card.cpu, card.mem, card.profile)

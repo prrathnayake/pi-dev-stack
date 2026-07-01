@@ -6,7 +6,7 @@ from textual.containers import VerticalScroll, Horizontal, Container
 from textual.widgets import Static
 
 from .stat_gauge import StatGauge
-from ..data import system_stats
+from ..data import SystemStats
 
 
 def _fmt_bytes(n: int) -> str:
@@ -58,6 +58,11 @@ class SystemDashboard(VerticalScroll):
     }
     """
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._statics: dict[str, Static] = {}
+        self._gauges: dict[str, StatGauge] = {}
+
     def compose(self) -> ComposeResult:
         yield Static("HOST INFORMATION", classes="info-header")
         yield Static("", id="sys-host", classes="info-line")
@@ -86,47 +91,69 @@ class SystemDashboard(VerticalScroll):
         yield Static("", id="sys-temp-detail", classes="info-line")
 
     def on_mount(self) -> None:
-        self.refresh_data()
-        self.set_interval(1.5, self.refresh_data)
+        self._cache_children()
 
-    def refresh_data(self) -> None:
-        s = system_stats()
+    def _cache_children(self) -> None:
+        if self._statics and self._gauges:
+            return
+        self._statics = {
+            "host": self.query_one("#sys-host", Static),
+            "os": self.query_one("#sys-os", Static),
+            "uptime": self.query_one("#sys-uptime", Static),
+            "cores": self.query_one("#sys-cores", Static),
+            "cores_detail": self.query_one("#sys-cores-detail", Static),
+            "load_detail": self.query_one("#sys-load-detail", Static),
+            "net_detail": self.query_one("#sys-net-detail", Static),
+            "temp_detail": self.query_one("#sys-temp-detail", Static),
+        }
+        self._gauges = {
+            "cpu": self.query_one("#gauge-cpu", StatGauge),
+            "mem": self.query_one("#gauge-mem", StatGauge),
+            "swap": self.query_one("#gauge-swap", StatGauge),
+            "disk": self.query_one("#gauge-disk", StatGauge),
+            "load": self.query_one("#gauge-load", StatGauge),
+            "net": self.query_one("#gauge-net", StatGauge),
+        }
 
-        self.query_one("#sys-host", Static).update(f"  Host:  {s.hostname}")
+    def update_stats(self, stats: SystemStats) -> None:
+        self._cache_children()
+        s = stats
+
+        self._statics["host"].update(f"  Host:  {s.hostname}")
         os_line = f"  OS:    {s.os_name}" if s.os_name else "  OS:    unknown"
-        self.query_one("#sys-os", Static).update(os_line)
+        self._statics["os"].update(os_line)
         up_line = f"  Up:    {_fmt_uptime(s.uptime_seconds)}" if s.uptime_seconds else "  Up:    unknown"
-        self.query_one("#sys-uptime", Static).update(up_line)
-        self.query_one("#sys-cores", Static).update(f"  Cores: {s.cpu_count}")
+        self._statics["uptime"].update(up_line)
+        self._statics["cores"].update(f"  Cores: {s.cpu_count}")
 
-        self.query_one("#gauge-cpu", StatGauge).set_value(s.cpu_percent)
-        self.query_one("#gauge-mem", StatGauge).set_value(
+        self._gauges["cpu"].set_value(s.cpu_percent)
+        self._gauges["mem"].set_value(
             s.mem_percent, f"{_fmt_bytes(s.mem_used)} / {_fmt_bytes(s.mem_total)}"
         )
-        swap_gauge = self.query_one("#gauge-swap", StatGauge)
+        swap_gauge = self._gauges["swap"]
         if s.swap_total > 0:
             swap_gauge.set_value(s.swap_percent, f"{_fmt_bytes(s.swap_used)} / {_fmt_bytes(s.swap_total)}")
         else:
             swap_gauge.set_value(0.0, "no swap")
-        self.query_one("#gauge-disk", StatGauge).set_value(
+        self._gauges["disk"].set_value(
             s.disk_percent, f"{_fmt_bytes(s.disk_used)} / {_fmt_bytes(s.disk_total)}"
         )
         load_percent = min(s.load_avg[0] / max(s.cpu_count, 1) * 100, 100) if s.cpu_count else 0
-        self.query_one("#gauge-load", StatGauge).set_value(load_percent, f"{s.load_avg[0]:.2f}")
+        self._gauges["load"].set_value(load_percent, f"{s.load_avg[0]:.2f}")
         net_percent = 0.0
-        self.query_one("#gauge-net", StatGauge).set_value(net_percent, f"↑{_fmt_bytes(s.net_sent)} ↓{_fmt_bytes(s.net_recv)}")
+        self._gauges["net"].set_value(net_percent, f"↑{_fmt_bytes(s.net_sent)} ↓{_fmt_bytes(s.net_recv)}")
 
         if s.cpu_per_core:
             core_summary = "  ".join(f"[{i}] {c:.0f}%" for i, c in enumerate(s.cpu_per_core[:8]))
-            self.query_one("#sys-cores-detail", Static).update(f"  {core_summary}")
+            self._statics["cores_detail"].update(f"  {core_summary}")
 
-        self.query_one("#sys-load-detail", Static).update(
+        self._statics["load_detail"].update(
             f"  Load:  {s.load_avg[0]:.2f}  {s.load_avg[1]:.2f}  {s.load_avg[2]:.2f}"
         )
-        self.query_one("#sys-net-detail", Static).update(
+        self._statics["net_detail"].update(
             f"  Net:   ↑ {_fmt_bytes(s.net_sent)}   ↓ {_fmt_bytes(s.net_recv)}"
         )
         if s.temp_celsius is not None:
-            self.query_one("#sys-temp-detail", Static).update(f"  Temp:  {s.temp_celsius:.1f}°C")
+            self._statics["temp_detail"].update(f"  Temp:  {s.temp_celsius:.1f}°C")
         else:
-            self.query_one("#sys-temp-detail", Static).update("  Temp:  —")
+            self._statics["temp_detail"].update("  Temp:  —")

@@ -55,11 +55,14 @@ class HomelabBanner(Container):
     def __init__(self) -> None:
         super().__init__()
         self._logo_text = _generate_logo()
+        self._logo_frames = (
+            _gradient_ascii(self._logo_text, "#FF7A1A", "#FFD580"),
+            _gradient_ascii(self._logo_text, "#FF9A3C", "#FFB347"),
+        )
         self._pulse_phase = 0
 
     def compose(self) -> ComposeResult:
-        logo = _gradient_ascii(self._logo_text)
-        yield Static(Align.center(logo), id="logo")
+        yield Static(Align.center(self._logo_frames[0]), id="logo")
 
     def on_mount(self) -> None:
         self.styles.animate("opacity", 1.0, duration=0.01, final_value=1.0)
@@ -68,8 +71,4 @@ class HomelabBanner(Container):
     def _pulse(self) -> None:
         self._pulse_phase = (self._pulse_phase + 1) % 2
         logo = self.query_one("#logo", Static)
-        if self._pulse_phase == 0:
-            text = _gradient_ascii(self._logo_text, "#FF7A1A", "#FFD580")
-        else:
-            text = _gradient_ascii(self._logo_text, "#FF9A3C", "#FFB347")
-        logo.update(Align.center(text))
+        logo.update(Align.center(self._logo_frames[self._pulse_phase]))

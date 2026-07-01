@@ -1,10 +1,20 @@
 """Clickable action bar — touch-friendly buttons for service control."""
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.message import Message
 from textual.widgets import Button, Static
+
+
+@dataclass(frozen=True)
+class ActionSpec:
+    action: str
+    label: str
+    button_id: str
+    css_class: str
 
 
 class ActionBar(Horizontal):
@@ -12,17 +22,17 @@ class ActionBar(Horizontal):
 
     DEFAULT_CSS = """
     ActionBar {
-        height: 3;
+        height: 2;
         dock: bottom;
-        padding: 0 1;
+        padding: 0 0;
         background: $panel;
         border-top: solid $border;
     }
     ActionBar > .action-btn {
-        min-width: 10;
-        height: 3;
+        min-width: 7;
+        height: 2;
         padding: 0 1;
-        margin: 0 1;
+        margin: 0 0;
         border: solid $border-blurred;
     }
     ActionBar > .action-btn:hover {
@@ -73,7 +83,7 @@ class ActionBar(Horizontal):
     ActionBar > #key-hints {
         width: 1fr;
         color: $text-disabled;
-        padding: 1 1;
+        padding: 0 1;
         text-align: right;
     }
     """
@@ -83,24 +93,25 @@ class ActionBar(Horizontal):
             self.action = action
             super().__init__()
 
+    @classmethod
+    def actions(cls) -> tuple[ActionSpec, ...]:
+        return (
+            ActionSpec("menu", "Menu", "btn-menu", "action-menu"),
+            ActionSpec("start", "Start", "btn-start", "action-start"),
+            ActionSpec("stop", "Stop", "btn-stop", "action-stop"),
+            ActionSpec("restart", "Restart", "btn-restart", "action-restart"),
+            ActionSpec("url", "URL", "btn-url", "action-url"),
+            ActionSpec("logs", "Logs", "btn-logs", "action-logs"),
+            ActionSpec("quit", "Quit", "btn-quit", "action-quit"),
+        )
+
     def compose(self) -> ComposeResult:
-        yield Button("▶ Start", id="btn-start", classes="action-btn action-start")
-        yield Button("■ Stop", id="btn-stop", classes="action-btn action-stop")
-        yield Button("↻ Restart", id="btn-restart", classes="action-btn action-restart")
-        yield Button("🔗 URL", id="btn-url", classes="action-btn action-url")
-        yield Button("📜 Logs", id="btn-logs", classes="action-btn action-logs")
-        yield Button("✕ Quit", id="btn-quit", classes="action-btn action-quit")
-        yield Static("  s x r u l  1-4  q", id="key-hints")
+        for spec in self.actions():
+            yield Button(spec.label, id=spec.button_id, classes=f"action-btn {spec.css_class}")
+        yield Static("m menu  s/x/r/u/l  q", id="key-hints")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        action_map = {
-            "btn-start": "start",
-            "btn-stop": "stop",
-            "btn-restart": "restart",
-            "btn-url": "url",
-            "btn-logs": "logs",
-            "btn-quit": "quit",
-        }
+        action_map = {spec.button_id: spec.action for spec in self.actions()}
         action = action_map.get(event.button.id, "")
         if action:
             self.post_message(self.ActionTriggered(action))
