@@ -1,81 +1,34 @@
-#!/bin/bash
-#
-# homelab — Pi Dev Stack CLI
-#
-# Modular entry point: sources lib/ and commands/ then dispatches.
-# Service metadata is driven by config/services.tsv (the registry).
+#!/bin/sh
+set -eu
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$ROOT_DIR" || exit 1
+ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PYTHON=${PYTHON:-python3}
+VENV="$ROOT_DIR/.homelab-venv"
+MARKER="$VENV/.installed"
 
-# --- parse global flags ---
-OUTPUT_FORMAT="text"
-ARGS=()
-for arg in "$@"; do
-  case "$arg" in
-    --json) OUTPUT_FORMAT="json" ;;
-    *) ARGS+=("$arg") ;;
-  esac
-done
-set -- "${ARGS[@]}"
+if ! command -v "$PYTHON" >/dev/null 2>&1; then
+  echo "homelab requires Python 3.11 or newer." >&2
+  exit 3
+fi
 
-# --- source libraries ---
-. "$ROOT_DIR/lib/output.sh"
-. "$ROOT_DIR/lib/system.sh"
-. "$ROOT_DIR/lib/registry.sh"
-. "$ROOT_DIR/lib/docker.sh"
+if ! "$PYTHON" -c 'import sys; raise SystemExit(sys.version_info < (3, 11))'; then
+  echo "homelab requires Python 3.11 or newer." >&2
+  exit 3
+fi
 
-# --- source commands ---
-for _cmdfile in "$ROOT_DIR"/commands/*.sh; do
-  [ -f "$_cmdfile" ] && . "$_cmdfile"
-done
-unset _cmdfile
+if [ ! -x "$VENV/bin/python" ]; then
+  echo "Creating homelab CLI environment..." >&2
+  "$PYTHON" -m venv "$VENV" || {
+    echo "Unable to create a virtual environment. Install python3-venv." >&2
+    exit 3
+  }
+fi
 
-# --- local extensions ---
-LOCAL_CLI_DIR="${LOCAL_CLI_DIR:-local/cli.d}"
-load_local_cli_extensions() {
-  [ -d "$LOCAL_CLI_DIR" ] || return 0
-  local file
-  for file in "$LOCAL_CLI_DIR"/*.sh; do
-    [ -f "$file" ] || continue
-    . "$file"
-  done
-}
-load_local_cli_extensions
+if [ ! -f "$MARKER" ] || [ "$ROOT_DIR/pyproject.toml" -nt "$MARKER" ]; then
+  echo "Installing homelab CLI dependencies..." >&2
+  "$VENV/bin/python" -m pip install --quiet --disable-pip-version-check --editable "$ROOT_DIR" || exit 3
+  touch "$MARKER"
+fi
 
-# --- dispatch ---
-cmd="${1:-help}"
-[ $# -gt 0 ] && shift || true
-
-case "$cmd" in
-  help|--help|-h)   cmd_help "$@" ;;
-  up|start)         cmd_up "$@" ;;
-  start-all|extras) cmd_up --all ;;
-  down|stop)        cmd_down "$@" ;;
-  restart)          cmd_restart "$@" ;;
-  status|ps)        cmd_status "$@" ;;
-  logs)             cmd_logs "$@" ;;
-  doctor)           cmd_doctor "$@" ;;
-  validate)         cmd_validate "$@" ;;
-  install)          cmd_install "$@" ;;
-  install-global)   cmd_install --global ;;
-  update)           cmd_update "$@" ;;
-  backup)           cmd_backup "$@" ;;
-  restore)          cmd_restore "$@" ;;
-  tunnel)           cmd_tunnel "$@" ;;
-  urls)             cmd_urls "$@" ;;
-  service)          cmd_service "$@" ;;
-  pihole)           cmd_pihole "$@" ;;
-  tui)              cmd_tui "$@" ;;
-  *)
-    if is_service "$cmd"; then
-      service_alias "$cmd" "$@"
-    elif declare -F local_cli_command >/dev/null 2>&1 && local_cli_command "$cmd" "$@"; then
-      exit 0
-    else
-      log_error "Unknown command: $cmd"
-      log_info "Run: homelab help"
-      exit 1
-    fi
-    ;;
-esac
+export PI_DEV_STACK_ROOT="$ROOT_DIR"
+exec "$VENV/bin/python" -m homelab_cli "$@"

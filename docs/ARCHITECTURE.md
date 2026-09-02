@@ -1,145 +1,54 @@
-# Homelab Runtime Architecture
+# Homelab CLI Architecture
 
-## Core principle
+## Principles
 
-Tracked infrastructure files should remain stable and updateable through:
+- Tracked infrastructure remains safe to update with fast-forward-only Git operations.
+- Runtime data and machine-specific configuration live only in ignored paths.
+- Every external command is executed as an argument array without shell expansion.
+- Human-readable and JSON operation paths share validation, safety, and exit behavior.
+- Destructive targets must be explicit and confirmation is independent of output format.
 
-```bash
-git pull
-```
+## Launcher and Python package
 
-All runtime-generated information, user configuration, and machine-specific state must be stored in ignored local folders.
+`homelab` is a small POSIX shell bootstrapper. It verifies Python 3.11+, creates `.homelab-venv`, installs the pinned project package, and runs `python -m homelab_cli`.
 
-## CLI structure
-
-The `homelab` command is a modular bash CLI:
-
-```text
-homelab                  entry point — flag parsing, lib loading, dispatch
-lib/
-  output.sh              text + JSON output helpers
-  docker.sh              Docker command detection, compose helpers
-  registry.sh            service registry loader and query functions
-  system.sh              OS detection
-config/
-  services.tsv           service registry (single source of truth)
-commands/
-  up.sh    down.sh    restart.sh   status.sh   logs.sh
-  doctor.sh validate.sh backup.sh   update.sh   install.sh
-  tunnel.sh service.sh  pihole.sh   help.sh     tui.sh
-tui/                      Textual-based monitoring TUI (Python)
-  __main__.py  app.py  data.py  theme.py
-  components/
-    banner.py  stats_bar.py  menu_bar.py  action_bar.py
-    service_card.py  service_grid.py  status_badge.py
-    stat_gauge.py  system_dashboard.py
-    log_panel.py  loading_spinner.py  pull_progress.py
-    registry_table.py
-  requirements.txt        textual, psutil, pyfiglet (installed into tui/.venv on first run)
-```
-
-### Service registry
-
-`config/services.tsv` is the single source of truth for service metadata.
-
-Pipe-delimited columns:
+The Python package is divided by responsibility:
 
 ```text
-name|profile|group|port|scheme|path|aliases|tunnel|tunnel_groups|url_note
+homelab_cli/
+  app.py            Typer command groups and public behavior
+  context.py        global options, output envelope, confirmations, exit codes
+  runner.py         bounded subprocess execution and Docker detection
+  registry.py       service metadata and Compose contract validation
+  configuration.py  masked reads and atomic .env writes
+  backups.py        verified backup, restore, and pruning operations
+  tunnels.py        Cloudflare process and URL state
+  guided.py         line-oriented interactive command launcher
 ```
 
-Adding a new service to `docker-compose.yml` requires one additional line in the registry. The CLI automatically picks up the new service for `service list`, `url`, tunnel groups, and `homelab <service> <action>` aliases.
+## Service registry
 
-### Local extensions
+`config/services.tsv` remains the metadata source for names, profiles, groups, aliases, local URLs, and tunnel eligibility. `docker-compose.yml` remains the deployment source. Validation requires both sources to contain the same service set, correct `pi-<service>` container names, and matching core/extras profiles.
 
-User-defined commands can be added as scripts in `local/cli.d/*.sh`. These are sourced at startup and can define a `local_cli_command` function for custom dispatch.
-
-## Runtime state folders
-
-### state/
-
-Persistent generated runtime state.
-
-Examples:
+## Runtime paths
 
 ```text
-state/tunnels.json
-state/system-info.json
-state/desktop.json
-state/services.json
+.env                         local configuration and secrets
+.homelab-venv/               managed Python environment
+data/                        persistent service data
+media/                       media library; never implicitly purged or backed up
+backups/                     verified archives
+logs/                        tunnel and operational logs
+state/tunnels.json           persistent tunnel process and URL state
+.local-state/config-backups/ atomic .env backups
+.local-state/restore-backups/rollback data from restores
+local/                       preserved user-local data; never executed automatically
 ```
 
-### .local-state/
+## Command execution
 
-Ephemeral machine-local runtime cache.
+The shared runner captures at most 1 MiB per stream, enforces timeouts, and terminates the complete process group with TERM followed by KILL. Streaming is reserved for explicitly interactive commands such as followed logs and service shells. Docker privilege detection tries the current user and then `sudo -n`; it never opens a hidden password prompt.
 
-Examples:
+## Backups
 
-```text
-.local-state/current-urls.txt
-.local-state/doctor-report.txt
-.local-state/dashboard-cache.json
-```
-
-### local/
-
-User custom scripts and extensions.
-
-Examples:
-
-```text
-local/custom-tunnels.sh
-local/backup-hooks.sh
-local/desktop-start.sh
-```
-
-### media/
-
-Plex media library bind mount. Not part of `data/` so it is excluded from
-`homelab backup` by design (large, often already backed up elsewhere).
-
-Examples:
-
-```text
-media/movies
-media/tv
-media/music
-```
-
-## Generated configuration
-
-Generated configs should never overwrite tracked templates.
-
-Examples:
-
-```text
-Tracked template:
-cloudflared/config.example.yml
-
-Generated local file:
-cloudflared/config.yml
-```
-
-## Safe update workflow
-
-The goal is:
-
-```bash
-git pull
-```
-
-without conflicts.
-
-This is achieved by:
-
-- never editing tracked runtime files locally
-- generating machine-specific state into ignored folders
-- using templates + generated configs
-- separating runtime state from infrastructure code
-
-## Recommended future improvements
-
-- runtime event bus
-- background daemon mode
-- JSON API server for homelab CLI
-- web dashboard frontend
+Backups require `.env` and `data/`, exclude media unless requested, write to a partial archive, validate content, and atomically publish the final file. Restore rejects traversal, links, devices, and unexpected roots, stages extraction, and keeps replaced paths under `.local-state/restore-backups`.

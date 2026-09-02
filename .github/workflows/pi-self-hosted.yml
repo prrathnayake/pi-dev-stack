@@ -18,11 +18,14 @@ jobs:
       - name: Ensure scripts executable
         run: chmod +x homelab
 
+      - name: Install CLI
+        run: python3 -m pip install .
+
       - name: Validate compose
         run: docker compose config
 
       - name: Start full stack
-        run: docker compose up -d
+        run: python3 -m homelab_cli stack start --profile all
 
       - name: Wait for services
         run: |
@@ -49,9 +52,7 @@ jobs:
 
       - name: Start tunnels
         run: |
-          chmod +x homelab
-          nohup ./homelab tunnel core > tunnel-test.log 2>&1 &
-          sleep 20
+          python3 -m homelab_cli tunnel start core
 
       - name: Verify Cloudflare URLs generated
         run: |

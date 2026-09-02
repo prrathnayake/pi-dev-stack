@@ -19,25 +19,25 @@ docker compose --profile extras up -d code-server
 Then:
 
 ```bash
-homelab code-server status
+homelab service status code-server
 ```
 
 ## Restart Service
 
 ```bash
-homelab code-server restart
+homelab service restart code-server
 ```
 
 ## Logs
 
 ```bash
-homelab code-server logs
+homelab service logs code-server --follow
 ```
 
 ## Open Shell
 
 ```bash
-homelab code-server shell
+homelab service shell code-server
 ```
 
 ## Persistent Data
@@ -71,5 +71,5 @@ CODE_SERVER_PASSWORD=new_password
 Then restart:
 
 ```bash
-homelab code-server restart
+homelab service restart code-server
 ```

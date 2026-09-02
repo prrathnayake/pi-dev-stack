@@ -1,3 +1,0 @@
-textual>=0.52
-psutil>=6.0
-pyfiglet>=1.0

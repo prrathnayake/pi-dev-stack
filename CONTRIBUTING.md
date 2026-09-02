@@ -1,105 +1,41 @@
 # Contributing
 
-Thank you for contributing to Pi Dev Stack.
-
-## Development workflow
+## Development setup
 
 ```bash
 git clone https://github.com/prrathnayake/pi-dev-stack.git
 cd pi-dev-stack
-chmod +x homelab
+python3 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
 ```
 
-Run validation:
+Run the checks:
 
 ```bash
-./homelab doctor
-./homelab validate
+.venv/bin/ruff check homelab_cli tests
+.venv/bin/pytest
+docker compose --profile extras config
+sh -n homelab
 ```
 
-## MCP server development
+## CLI rules
 
-```bash
-cd mcp-server
-npm install
-npm run build
-npm test
-```
+- Preserve the structured result envelope and documented exit codes.
+- Route external processes through the shared runner.
+- Do not use shell expansion for user-controlled input.
+- Propagate underlying failures instead of printing unconditional success.
+- Make destructive targets explicit and require confirmation or `--yes`.
+- Do not let `--json` weaken confirmation behavior.
+- Mask secrets in both text and JSON unless the user explicitly requests disclosure.
+- Keep service metadata and Compose definitions synchronized.
 
-## TUI development
+## Local state
 
-The TUI is a Python package under `tui/` using the Textual framework.
-
-```bash
-python3 -m venv tui/.venv
-tui/.venv/bin/pip install -r tui/requirements.txt
-tui/.venv/bin/python -m tui
-```
-
-Syntax check without installing deps:
-
-```bash
-python3 -m py_compile tui/__main__.py tui/app.py tui/data.py tui/theme.py
-for f in tui/components/*.py; do python3 -m py_compile "$f"; done
-```
-
-Keep the MCP server safe by default:
-
-- do not expose arbitrary shell commands
-- validate all user input before calling `homelab`
-- keep destructive actions disabled unless explicitly gated
-- do not expose `.env`, secret inspection, restore, reset, or service shell tools
-
-## Important rules
-
-Do not store secrets in Git.
-
-Do not modify local-only ignored files inside pull requests:
-
-- .env
-- .env.local
-- data/
-- logs/
-- local/
-- docker-compose.override.yml
-
-## Local customization
-
-Use:
-
-```bash
-cp docker-compose.override.example.yml docker-compose.override.yml
-```
-
-Store custom scripts under:
-
-```text
-local/
-```
-
-## Testing
-
-CI validates:
-
-- shell scripts
-- Docker Compose config
-- homelab CLI
-- MCP server TypeScript build
-- MCP server unit tests
-- PostgreSQL
-- Redis
-- n8n startup
-- cloudflared installation
+Never commit secrets or generated machine state. Do not alter user-owned `.env`, `data/`, `media/`, `logs/`, `backups/`, `.local-state/`, `state/`, or `local/` content in changes or tests.
 
 ## Pull requests
 
-Please:
-
-- keep scripts POSIX compatible when possible
-- avoid breaking Raspberry Pi ARM64 support
-- test with Docker Compose before submitting
-- update documentation when adding features
-
-## License
-
-By contributing, you agree that your contributions are licensed under the MIT License.
+- Add or update tests for public behavior and failure paths.
+- Run the full Python, shell, and Compose checks.
+- Update user documentation when command behavior changes.
+- Preserve Raspberry Pi ARM64 and AMD64 Linux support.

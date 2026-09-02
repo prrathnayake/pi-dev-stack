@@ -7,43 +7,43 @@ Describe what the service does.
 ## Start Service
 
 ```bash
-homelab SERVICE_NAME start
+homelab service start SERVICE_NAME
 ```
 
 ## Stop Service
 
 ```bash
-homelab SERVICE_NAME stop
+homelab service stop SERVICE_NAME
 ```
 
 ## Restart Service
 
 ```bash
-homelab SERVICE_NAME restart
+homelab service restart SERVICE_NAME
 ```
 
 ## Check Status
 
 ```bash
-homelab SERVICE_NAME status
+homelab service status SERVICE_NAME
 ```
 
 ## View Logs
 
 ```bash
-homelab SERVICE_NAME logs
+homelab service logs SERVICE_NAME --follow
 ```
 
 ## Open Shell
 
 ```bash
-homelab SERVICE_NAME shell
+homelab service shell SERVICE_NAME
 ```
 
 ## Show URL
 
 ```bash
-homelab SERVICE_NAME url
+homelab service url SERVICE_NAME
 ```
 
 ## Docker Compose Alternative
@@ -64,13 +64,13 @@ data/SERVICE_NAME/
 ### Service Not Starting
 
 ```bash
-homelab SERVICE_NAME logs
+homelab service logs SERVICE_NAME --follow
 ```
 
 ### Restart Service
 
 ```bash
-homelab SERVICE_NAME restart
+homelab service restart SERVICE_NAME
 ```
 
 ### Inspect Container
