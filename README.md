@@ -1,151 +1,85 @@
-# Pi Dev Stack / Homelab CLI
+# Pi Dev Stack
 
-A Raspberry Pi self-hosted developer, AI, automation, monitoring, networking, remote-access, and cyberdeck stack managed by a single `homelab` CLI command.
+A Raspberry Pi and ARM64 homelab stack with a guided, automation-friendly `homelab` command.
 
-This project is designed for Raspberry Pi 5 and ARM64 Linux machines, but most services also run on regular Linux servers.
+The stack includes developer tools, local AI, automation, monitoring, networking, storage, remote access, and media services managed through Docker Compose.
 
-## What This Homelab Provides
-
-This repository gives you:
-
-- Docker Compose based service orchestration
-- interactive `homelab` CLI
-- MCP server for AI-assisted homelab inspection and safe operations
-- AI runtime with Ollama
-- browser AI interface with Open WebUI
-- workflow automation with n8n
-- PostgreSQL and Redis infrastructure
-- network-wide ad blocking with Pi-hole
-- container management with Portainer
-- compose stack control with Dockge
-- logs dashboard with Dozzle
-- uptime monitoring with Uptime Kuma
-- system monitoring with Glances
-- dashboard launcher with Homepage
-- temporary HTTPS access with Cloudflare quick tunnels
-- stable domain support with named Cloudflare Tunnels
-- private remote desktop access through Tailscale + VNC
-- backup and restore commands
-- local generated state separation for safe `git pull`
-- media streaming with Plex
-
-## Included Services
-
-### AI and Automation
-
-| Service | Purpose | Local URL |
-|---|---|---|
-| n8n | Workflow automation | http://localhost:5678 |
-| Ollama | Local LLM runtime | http://localhost:11434 |
-| Open WebUI | Browser interface for Ollama | http://localhost:3000 |
-
-### Infrastructure and Networking
-
-| Service | Purpose | Local URL |
-|---|---|---|
-| PostgreSQL | Main database for n8n | - |
-| Redis | Cache / queue service | - |
-| Pi-hole | DNS ad blocker and local DNS sinkhole | http://localhost:8081/admin |
-
-### Monitoring and Operations
-
-| Service | Purpose | Local URL |
-|---|---|---|
-| Portainer | Docker management dashboard | http://localhost:9000 |
-| Dockge | Docker Compose stack dashboard | http://localhost:5001 |
-| Dozzle | Real-time logs | http://localhost:9999 |
-| Uptime Kuma | Uptime monitoring | http://localhost:3001 |
-| Homepage | Homelab dashboard | http://localhost:8088 |
-| Glances | System monitoring | http://localhost:61208 |
-
-### Media
-
-| Service | Purpose | Local URL |
-|---|---|---|
-| Plex | Media streaming server | http://localhost:32400/web |
-
-## Quick Start
+## Quick start
 
 ```bash
-sudo apt install -y git
-
+sudo apt install -y git python3 python3-venv
 git clone https://github.com/prrathnayake/pi-dev-stack.git
 cd pi-dev-stack
-chmod +x homelab
-./homelab install
+./homelab setup
+./homelab stack start
 ```
 
-## Pi-hole
+The launcher creates an ignored `.homelab-venv` and installs pinned CLI dependencies on first use. Running `./homelab` with no arguments opens guided mode in an interactive terminal.
 
-Pi-hole is included for network-wide DNS filtering and ad blocking.
-
-Admin UI:
-
-```text
-http://localhost:8081/admin
-```
-
-### Start Pi-hole
+## Common commands
 
 ```bash
-homelab pihole start
+# One-shot summary
+homelab overview
+
+# Stack and services
+homelab stack start --profile core
+homelab stack status --profile all
+homelab service list
+homelab service start n8n open-webui
+homelab service logs n8n --tail 200
+homelab service logs n8n --follow
+homelab service url pihole
+
+# Configuration and diagnostics
+homelab config init
+homelab config list
+homelab config set POSTGRES_PASSWORD
+homelab config validate
+homelab system doctor
+homelab system validate
+
+# Backups and maintenance
+homelab backup create
+homelab backup verify backups/pi-dev-stack-YYYYMMDD-HHMMSS.tar.gz
+homelab update check
+homelab update images n8n --restart
 ```
 
-### Pi-hole CLI Commands
+Use `homelab COMMAND --help` for the complete option list.
+
+## Safety and automation
+
+- Destructive operations require confirmation or the global `--yes` flag.
+- The global `--dry-run` flag previews state-changing commands.
+- Media deletion always requires the explicit `data purge --media` option.
+- Secret configuration values are masked unless deliberately revealed.
+- `--json` emits one object with `ok`, `command`, `data`, `warnings`, and `errors`.
+- Underlying Docker, Git, archive, and system failures are returned as nonzero exit codes.
+
+Global exit codes are `0` success, `2` usage or confirmation required, `3` missing prerequisite, `4` operation failure, and `5` partial completion.
+
+## Service groups
+
+Core services include PostgreSQL, Redis, n8n, Ollama, Open WebUI, Portainer, Dozzle, Uptime Kuma, Homepage, Glances, Home Assistant, and Pi-hole.
+
+Optional services under the `extras` profile include Watchtower, Traefik, Vaultwarden, Gitea, MinIO, Syncthing, File Browser, Netdata, Prometheus, Grafana, Mosquitto, Node-RED, code-server, Plex, and Dockge.
+
+Service metadata lives in `config/services.tsv`; `homelab system validate` checks it against `docker-compose.yml`.
+
+## Remote access
+
+Quick Cloudflare tunnels can be managed by service or tunnel group:
 
 ```bash
-homelab pihole status
-homelab pihole logs
-homelab pihole shell
-
-homelab pihole block ads.example.com
-homelab pihole enable example.com
-
-homelab pihole disable 300
-homelab pihole enable-blocking
-
-homelab pihole update-gravity
-homelab pihole stats
+homelab tunnel start core
+homelab tunnel status
+homelab tunnel urls
+homelab tunnel stop core
 ```
 
-### Change Pi-hole Password
+For persistent administrative access, prefer Tailscale or a local SSH session.
 
-```bash
-homelab pihole password '<new-password>'
-```
+## Development
 
-### DNS Port
-
-Pi-hole exposes:
-
-| Port | Purpose |
-|---:|---|
-| 53 TCP/UDP | DNS |
-| 8081 | Admin web UI |
-
-### Environment Variables
-
-Configure in `.env`:
-
-```env
-PIHOLE_WEBPASSWORD=change_this_pihole_password
-PIHOLE_HOSTNAME=pi-hole
-PIHOLE_DNS_BIND=0.0.0.0
-PIHOLE_WEB_BIND=127.0.0.1
-PIHOLE_DNS_LISTENING_MODE=all
-PIHOLE_DNS_UPSTREAMS=1.1.1.1;1.0.0.1
-TIMEZONE=Australia/Melbourne
-```
-
-### Persistent Pi-hole Data
-
-```text
-data/pihole/etc-pihole
-data/pihole/etc-dnsmasq.d
-```
-
-See full documentation:
-
-```text
-docs/PIHOLE.md
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

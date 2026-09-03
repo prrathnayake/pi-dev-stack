@@ -13,43 +13,43 @@ http://localhost:8081/admin
 ## Start Pi-hole
 
 ```bash
-homelab pihole start
+homelab service start pihole
 ```
 
 ## Stop Pi-hole
 
 ```bash
-homelab pihole stop
+homelab service stop pihole
 ```
 
 ## Restart Pi-hole
 
 ```bash
-homelab pihole restart
+homelab service restart pihole
 ```
 
 ## Check Status
 
 ```bash
-homelab pihole status
+homelab service status pihole
 ```
 
 ## View Logs
 
 ```bash
-homelab pihole logs
+homelab service logs pihole --follow
 ```
 
 ## Open Shell
 
 ```bash
-homelab pihole shell
+homelab service shell pihole
 ```
 
 ## Show URL
 
 ```bash
-homelab pihole url
+homelab service url pihole
 ```
 
 ## Block Domain

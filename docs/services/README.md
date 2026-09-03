@@ -4,16 +4,10 @@ Every service in Pi Dev Stack can be managed through the `homelab` CLI.
 
 ## Common Command Pattern
 
-Use either the generic service command:
+Use the service command group:
 
 ```bash
 homelab service <action> <service>
-```
-
-or the direct service alias:
-
-```bash
-homelab <service> <action>
 ```
 
 ## Common Actions
@@ -24,7 +18,7 @@ homelab <service> <action>
 | `stop` | Stop the service container |
 | `restart` | Restart the service container |
 | `status` | Show service status |
-| `logs` | Follow service logs |
+| `logs` | Show recent logs (`--follow` streams them) |
 | `shell` | Open shell inside the container |
 | `inspect` | Inspect container metadata |
 | `url` | Show the local URL when available |
@@ -60,7 +54,6 @@ homelab <service> <action>
 | Code Server | [code-server.md](code-server.md) |
 | Plex | [plex.md](plex.md) |
 | Dockge | [dockge.md](dockge.md) |
-| homelab tui | [tui.md](tui.md) |
 
 ## Extra Profile Services
 
@@ -70,4 +63,4 @@ Some services are in the Docker Compose `extras` profile. Start them with:
 docker compose --profile extras up -d <service>
 ```
 
-After they are running, the `homelab <service> <action>` pattern can control them.
+The `homelab service <action> <service>` pattern controls both core and extra services.

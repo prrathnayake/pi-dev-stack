@@ -13,43 +13,43 @@ http://localhost:5678
 ## Start n8n
 
 ```bash
-homelab n8n start
+homelab service start n8n
 ```
 
 ## Stop n8n
 
 ```bash
-homelab n8n stop
+homelab service stop n8n
 ```
 
 ## Restart n8n
 
 ```bash
-homelab n8n restart
+homelab service restart n8n
 ```
 
 ## Check Status
 
 ```bash
-homelab n8n status
+homelab service status n8n
 ```
 
 ## View Logs
 
 ```bash
-homelab n8n logs
+homelab service logs n8n --follow
 ```
 
 ## Open Shell
 
 ```bash
-homelab n8n shell
+homelab service shell n8n
 ```
 
 ## Show URL
 
 ```bash
-homelab n8n url
+homelab service url n8n
 ```
 
 ## Common Workflows
@@ -57,19 +57,19 @@ homelab n8n url
 ### Restart After Environment Changes
 
 ```bash
-homelab n8n restart
+homelab service restart n8n
 ```
 
 ### Validate Container
 
 ```bash
-homelab n8n logs
+homelab service logs n8n --follow
 ```
 
 ### Open Database Shell
 
 ```bash
-homelab postgres shell
+homelab service shell postgres
 ```
 
 ## Persistent Data
@@ -92,7 +92,7 @@ homelab backup
 
 ```bash
 sudo chown -R 1000:1000 data/n8n
-homelab n8n restart
+homelab service restart n8n
 ```
 
 ### Webhooks Not Working

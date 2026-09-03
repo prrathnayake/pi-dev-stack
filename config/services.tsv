@@ -11,7 +11,7 @@ homepage|core|ops|8088|http||home|yes|core,monitoring|
 glances|core|ops|61208|http|||yes|monitoring,ops|
 home-assistant|core|automation|8123|http||ha|yes||
 pihole|core|security|8081|http|/admin|pi-hole|yes|security|
-watchtower|extras|ops||http|||no||Watchtower has no web UI. Use: homelab watchtower logs
+watchtower|extras|ops||http|||no||Watchtower has no web UI. Use: homelab service logs watchtower
 traefik|extras|ops|8082|http||proxy|yes|ops|
 vaultwarden|extras|security|8083|http||vault|yes|security|
 gitea|extras|dev|3002|http|/|git|yes|dev|

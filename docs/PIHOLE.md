@@ -19,7 +19,7 @@ pi-pihole
 ## Start Pi-hole
 
 ```bash
-homelab pihole start
+homelab service start pihole
 ```
 
 or:
@@ -69,13 +69,13 @@ homelab pihole password '<new-password>'
 
 | Command | Purpose |
 |---|---|
-| `homelab pihole status` | Show Pi-hole container status |
-| `homelab pihole start` | Start Pi-hole |
-| `homelab pihole stop` | Stop Pi-hole |
-| `homelab pihole restart` | Restart Pi-hole |
-| `homelab pihole logs` | Follow Pi-hole logs |
-| `homelab pihole shell` | Open a shell inside the Pi-hole container |
-| `homelab pihole url` | Show local admin URL |
+| `homelab service status pihole` | Show Pi-hole container status |
+| `homelab service start pihole` | Start Pi-hole |
+| `homelab service stop pihole` | Stop Pi-hole |
+| `homelab service restart pihole` | Restart Pi-hole |
+| `homelab service logs pihole --follow` | Follow Pi-hole logs |
+| `homelab service shell pihole` | Open a shell inside the Pi-hole container |
+| `homelab service url pihole` | Show local admin URL |
 | `homelab pihole block <domain>` | Add a domain to Pi-hole blacklist |
 | `homelab pihole enable <domain>` | Add a domain to Pi-hole whitelist |
 | `homelab pihole disable [seconds]` | Temporarily disable blocking |
@@ -124,8 +124,8 @@ Common conflicts include `systemd-resolved`, another DNS service, or an existing
 Check container status and logs:
 
 ```bash
-homelab pihole status
-homelab pihole logs
+homelab service status pihole
+homelab service logs pihole --follow
 ```
 
 ### DNS Not Working From Other Devices

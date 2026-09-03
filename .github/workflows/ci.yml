@@ -1,144 +1,62 @@
-name: CI
+name: Validate Pi Dev Stack
 
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
-  compose-config:
-    name: Validate Compose config
+  cli:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install CLI and development dependencies
+        run: python -m pip install -e '.[dev]'
+      - name: Lint
+        run: ruff check homelab_cli tests
+      - name: Test
+        run: pytest -q
+      - name: Validate launcher
+        run: sh -n homelab
+      - name: Smoke test commands
+        run: |
+          python -m homelab_cli --help
+          python -m homelab_cli --json service list
+          python -m homelab_cli --dry-run setup
+
+  compose:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Create test env
+      - uses: actions/checkout@v4
+      - name: Create test environment
         run: cp .env.example .env
-
-      - name: Validate docker compose config
-        run: docker compose config
-
-      - name: Check shell scripts syntax
-        run: |
-          bash -n homelab
-          for f in lib/*.sh commands/*.sh; do bash -n "$f"; done
-
-      - name: Check TUI Python syntax
-        run: |
-          python3 -m py_compile tui/__main__.py
-          python3 -m py_compile tui/app.py
-          python3 -m py_compile tui/data.py
-          python3 -m py_compile tui/theme.py
-          for f in tui/components/*.py; do python3 -m py_compile "$f"; done
-
-      - name: Ensure executables
-        run: chmod +x homelab
-
-      - name: Test homelab help
-        run: |
-          ./homelab invalid-command || true
-          ./homelab status || true
-          ./homelab doctor || true
+      - name: Validate all Compose profiles
+        run: docker compose --profile extras config
 
   smoke-test-core:
-    name: Smoke test core containers
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Create test env
-        run: cp .env.example .env
-
-      - name: Prepare writable data directories
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install .
+      - run: cp .env.example .env
+      - run: mkdir -p data/postgres data/redis
+      - run: docker compose up -d postgres redis
+      - name: Verify PostgreSQL and Redis
         run: |
-          mkdir -p data/postgres data/redis data/n8n data/ollama data/open-webui data/portainer data/uptime-kuma
-          sudo chown -R 1000:1000 data/n8n
-          sudo chown -R 999:999 data/postgres data/redis || true
-
-      - name: Start lightweight dependencies
-        run: docker compose up -d postgres redis
-
-      - name: Wait for PostgreSQL
-        run: |
-          for i in {1..30}; do
-            if docker exec pi-postgres pg_isready -U dev -d n8n; then
-              exit 0
-            fi
-            sleep 2
-          done
-          docker compose logs postgres
-          exit 1
-
-      - name: Check Redis
-        run: docker exec pi-redis redis-cli ping | grep PONG
-
-      - name: Start n8n
-        run: docker compose up -d n8n
-
-      - name: Wait for n8n process
-        run: |
-          for i in {1..90}; do
-            STATUS=$(docker inspect -f '{{.State.Status}}' pi-n8n || true)
-            if [ "$STATUS" = "running" ]; then
-              echo "n8n container is running"
-              exit 0
-            fi
-            docker compose ps
-            sleep 2
-          done
-          docker compose logs n8n
-          exit 1
-
-      - name: Wait for n8n HTTP readiness
-        run: |
-          touch /tmp/n8n-response.txt
-          for i in {1..120}; do
-            CODE=$(curl -sS -o /tmp/n8n-response.txt -w "%{http_code}" http://127.0.0.1:5678/ || true)
-            if [ "$CODE" = "200" ] || [ "$CODE" = "302" ] || [ "$CODE" = "404" ]; then
-              echo "n8n responded with HTTP $CODE"
-              exit 0
-            fi
-            echo "Attempt $i: n8n not ready yet. HTTP=$CODE"
-            docker compose ps n8n
-            sleep 3
-          done
-          echo "n8n did not become HTTP-ready"
-          docker compose logs n8n
-          cat /tmp/n8n-response.txt || true
-          exit 1
-
-      - name: Test homelab commands against live stack
-        run: |
-          chmod +x homelab
-          ./homelab status || true
-          ./homelab doctor || true
-          ./homelab urls || true
-
-      - name: Show container status
-        if: always()
-        run: docker compose ps
-
-      - name: Show logs on failure
-        if: failure()
-        run: docker compose logs
-
-      - name: Cleanup
-        if: always()
+          for i in {1..30}; do docker exec pi-postgres pg_isready -U dev -d n8n && break; sleep 2; done
+          docker exec pi-postgres pg_isready -U dev -d n8n
+          docker exec pi-redis redis-cli ping | grep PONG
+          python -m homelab_cli stack status --profile core
+      - if: always()
         run: docker compose down -v --remove-orphans
-
-  tunnel-binary-check:
-    name: Check cloudflared binary
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Install cloudflared
-        run: |
-          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
-          sudo dpkg -i cloudflared.deb
-          cloudflared --version

@@ -19,25 +19,25 @@ docker compose --profile extras up -d plex
 Then:
 
 ```bash
-homelab plex status
+homelab service status plex
 ```
 
 ## Restart Service
 
 ```bash
-homelab plex restart
+homelab service restart plex
 ```
 
 ## Logs
 
 ```bash
-homelab plex logs
+homelab service logs plex --follow
 ```
 
 ## Open Shell
 
 ```bash
-homelab plex shell
+homelab service shell plex
 ```
 
 ## Persistent Data
@@ -80,7 +80,7 @@ https://www.plex.tv/claim/
 Then restart:
 
 ```bash
-homelab plex restart
+homelab service restart plex
 ```
 
 The token expires after a few minutes, so claim promptly after starting the container.
@@ -96,7 +96,7 @@ PLEX_WEB_BIND=0.0.0.0
 Then restart:
 
 ```bash
-homelab plex restart
+homelab service restart plex
 ```
 
 ## Ports

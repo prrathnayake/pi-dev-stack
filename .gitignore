@@ -12,13 +12,11 @@ cloudflared/config.yml
 docker-compose.override.yml
 *.log
 
-# Python / TUI
+# Python CLI
+.homelab-venv/
 .venv/
-tui/.venv/
 __pycache__/
 .pytest_cache/
 *.pyc
-
-# MCP server build and dependencies
-mcp-server/dist/
-mcp-server/node_modules/
+.ruff_cache/
+*.egg-info/

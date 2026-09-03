@@ -19,25 +19,25 @@ docker compose --profile extras up -d dockge
 Then:
 
 ```bash
-homelab dockge status
+homelab service status dockge
 ```
 
 ## Restart Service
 
 ```bash
-homelab dockge restart
+homelab service restart dockge
 ```
 
 ## Logs
 
 ```bash
-homelab dockge logs
+homelab service logs dockge --follow
 ```
 
 ## Open Shell
 
 ```bash
-homelab dockge shell
+homelab service shell dockge
 ```
 
 ## Persistent Data
@@ -73,7 +73,7 @@ DOCKGE_WEB_BIND=0.0.0.0
 Then restart:
 
 ```bash
-homelab dockge restart
+homelab service restart dockge
 ```
 
 ## Ports
@@ -103,5 +103,5 @@ homelab service inspect dockge
 Check that `.env` exists in the repo root with required variables; compose variable interpolation fails without it.
 
 ```bash
-homelab dockge logs
+homelab service logs dockge --follow
 ```
