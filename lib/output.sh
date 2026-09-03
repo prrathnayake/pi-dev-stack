@@ -45,6 +45,26 @@ json_kv_array() {
   printf ']\n'
 }
 
+# Convert newline-delimited JSON objects (as emitted by Docker Compose) into a
+# single JSON array without requiring jq.
+json_objects_array() {
+  local first=1 line
+  IFS= read -r line || { printf '[]\n'; return; }
+  # Some Compose releases emit an array while others emit one object per line.
+  case "$line" in
+    \[* ) printf '%s\n' "$line"; while IFS= read -r line; do printf '%s\n' "$line"; done; return ;;
+  esac
+  printf '[%s' "$line"
+  first=0
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    [ $first -eq 0 ] && printf ','
+    first=0
+    printf '%s' "$line"
+  done
+  printf ']\n'
+}
+
 log_info()  { printf '%s\n' "$*" >&2; }
 log_warn()  { printf '[WARN] %s\n' "$*" >&2; }
 log_error() { printf '[ERROR] %s\n' "$*" >&2; }

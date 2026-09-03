@@ -39,7 +39,11 @@ EOF
     status|ps)
       [ -n "$svc" ] || { log_error "Usage: homelab service status <service>"; return 1; }
       is_service "$svc" || { log_error "Unknown service: $svc"; return 1; }
-      $compose ps "$svc" ;;
+      if [ "$OUTPUT_FORMAT" = "json" ]; then
+        $compose ps --format json "$svc" | json_objects_array
+      else
+        $compose ps "$svc"
+      fi ;;
     logs)
       [ -n "$svc" ] || { log_error "Usage: homelab service logs <service>"; return 1; }
       is_service "$svc" || { log_error "Unknown service: $svc"; return 1; }

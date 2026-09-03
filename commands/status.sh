@@ -18,8 +18,16 @@ EOF
   if [ -n "$svc" ]; then
     if ! is_service "$svc"; then log_error "Unknown service: $svc"; return 1; fi
     local compose; compose=$(compose_for_service "$svc")
-    $compose ps "$svc"
+    if [ "$OUTPUT_FORMAT" = "json" ]; then
+      $compose ps --format json "$svc" | json_objects_array
+    else
+      $compose ps "$svc"
+    fi
   else
-    $DOCKER_CMD compose --profile extras ps
+    if [ "$OUTPUT_FORMAT" = "json" ]; then
+      $DOCKER_CMD compose --profile extras ps --format json | json_objects_array
+    else
+      $DOCKER_CMD compose --profile extras ps
+    fi
   fi
 }

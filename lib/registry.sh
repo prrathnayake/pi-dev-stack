@@ -39,17 +39,18 @@ _reg_idx() {
 is_service() { _reg_idx "$1" >/dev/null 2>&1; }
 
 is_extra() {
+  _load_registry || return 1
   local i; i=$(_reg_idx "$1") || return 1
   [ "${_REG_PROFILE[$i]}" = "extras" ]
 }
 
-registry_profile() { local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_PROFILE[$i]}"; }
-registry_group()   { local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_GROUP[$i]}"; }
-registry_port()    { local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_PORT[$i]}"; }
-registry_scheme()  { local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_SCHEME[$i]}"; }
-registry_path()    { local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_PATH[$i]}"; }
-registry_tunnel()  { local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_TUNNEL[$i]}"; }
-registry_urlnote() { local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_URLNOTE[$i]}"; }
+registry_profile() { _load_registry || return 1; local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_PROFILE[$i]}"; }
+registry_group()   { _load_registry || return 1; local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_GROUP[$i]}"; }
+registry_port()    { _load_registry || return 1; local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_PORT[$i]}"; }
+registry_scheme()  { _load_registry || return 1; local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_SCHEME[$i]}"; }
+registry_path()    { _load_registry || return 1; local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_PATH[$i]}"; }
+registry_tunnel()  { _load_registry || return 1; local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_TUNNEL[$i]}"; }
+registry_urlnote() { _load_registry || return 1; local i; i=$(_reg_idx "$1") || return 1; echo "${_REG_URLNOTE[$i]}"; }
 
 all_services()   { _load_registry; printf '%s\n' "${_REG_NAMES[@]}"; }
 core_services()  { _load_registry; local i; for i in "${!_REG_NAMES[@]}"; do [ "${_REG_PROFILE[$i]}" = "core" ] && echo "${_REG_NAMES[$i]}"; done; }
@@ -91,6 +92,7 @@ resolve_alias() {
 }
 
 service_url() {
+  _load_registry || return 1
   local i; i=$(_reg_idx "$1") || { echo "No URL registered for service: $1"; return 1; }
   local note="${_REG_URLNOTE[$i]}"
   [ -n "$note" ] && { echo "$note"; return 0; }

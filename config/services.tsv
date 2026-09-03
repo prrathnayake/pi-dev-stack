@@ -23,6 +23,6 @@ prometheus|extras|monitoring|9090|http|||yes|monitoring|
 grafana|extras|monitoring|3003|http|||yes|monitoring|
 mosquitto|extras|infra|1883|http|||no||Mosquitto MQTT: localhost:1883
 nodered|extras|automation|1880|http||node-red|yes|automation|
-code-server|extras|dev|8443|https||code|yes|dev|
+code-server|extras|dev|8443|http||code|yes|dev|
 plex|extras|media|32400|http|/web||yes|media|
 dockge|extras|ops|5001|http|||yes|ops|

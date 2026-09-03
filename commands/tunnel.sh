@@ -4,15 +4,44 @@
 
 STATE_FILE="${STATE_FILE:-state/tunnels.env}"
 URL_FILE="${URL_FILE:-.local-state/current-urls.txt}"
+TUNNEL_PID_DIR="${TUNNEL_PID_DIR:-state/tunnel-pids}"
 
 _tunnel_service_key() { echo "$1" | tr '[:lower:]-' '[:upper:]_'; }
+
+_tunnel_pid_file() { echo "$TUNNEL_PID_DIR/$1.pid"; }
+
+_tunnel_pid_running() {
+  local compose_name="$1" pid_file pid args port scheme
+  pid_file=$(_tunnel_pid_file "$compose_name")
+  [ -s "$pid_file" ] || return 1
+  read -r pid < "$pid_file"
+  case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+  kill -0 "$pid" 2>/dev/null || return 1
+  port=$(registry_port "$compose_name") || return 1
+  scheme=$(registry_scheme "$compose_name") || return 1
+  args=$(ps -p "$pid" -o args= 2>/dev/null) || return 1
+  case "$args" in
+    *"cloudflared tunnel --url ${scheme}://127.0.0.1:${port}"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_tunnel_remove_state() {
+  local compose_name="$1" key tmp
+  key=$(_tunnel_service_key "$compose_name")
+  [ -f "$STATE_FILE" ] || return 0
+  tmp="${STATE_FILE}.tmp.$$"
+  grep -v "^${key}_URL=" "$STATE_FILE" > "$tmp" || true
+  mv "$tmp" "$STATE_FILE"
+}
 
 _tunnel_wait_for_origin() {
   local scheme="$1" port="$2"
   local origin="${scheme}://127.0.0.1:${port}"
   for i in {1..30}; do
-    curl -fsS --max-time 3 "$origin" >/dev/null 2>&1 && return 0
-    curl -kfsS --max-time 3 "$origin" >/dev/null 2>&1 && return 0
+    # Any HTTP response proves that the origin is accepting connections. Some
+    # services legitimately return 401/403 at their root path.
+    curl -ksS --max-time 3 -o /dev/null "$origin" >/dev/null 2>&1 && return 0
     sleep 2
   done
   log_error "Origin not reachable: $origin"
@@ -21,7 +50,8 @@ _tunnel_wait_for_origin() {
 
 _tunnel_start_one() {
   local compose_name="$1"
-  local port scheme key log
+  local port scheme key log pid pid_file
+  command -v cloudflared >/dev/null 2>&1 || { log_error "cloudflared is not installed"; return 1; }
   port=$(registry_port "$compose_name") || { log_error "No port for $compose_name"; return 1; }
   scheme=$(registry_scheme "$compose_name")
   key=$(_tunnel_service_key "$compose_name")
@@ -29,30 +59,45 @@ _tunnel_start_one() {
 
   [ "$OUTPUT_FORMAT" != "json" ] && echo "Ensuring $compose_name is running..."
   local compose; compose=$(compose_for_service "$compose_name")
-  $compose up -d "$compose_name"
+  $compose up -d "$compose_name" || { log_error "Failed to start service: $compose_name"; return 1; }
 
   _tunnel_wait_for_origin "$scheme" "$port" || return 1
 
-  pkill -f "cloudflared tunnel --url ${scheme}://localhost:${port}" 2>/dev/null || true
-  pkill -f "cloudflared tunnel --url ${scheme}://127.0.0.1:${port}" 2>/dev/null || true
+  _tunnel_stop_one "$compose_name" quiet
   rm -f "$log"
 
   [ "$OUTPUT_FORMAT" != "json" ] && echo "Starting tunnel for $compose_name on ${scheme}://127.0.0.1:$port..."
   cloudflared tunnel --url "${scheme}://127.0.0.1:${port}" > "$log" 2>&1 &
+  pid=$!
+  mkdir -p "$TUNNEL_PID_DIR"
+  pid_file=$(_tunnel_pid_file "$compose_name")
+  echo "$pid" > "$pid_file"
 
-  local url=""
+  local url="" connected=""
   for i in {1..45}; do
     url=$(grep -o 'https://[-0-9a-z]*\.trycloudflare\.com' "$log" | head -n 1 || true)
-    [ -n "$url" ] && break
+    connected=$(grep -m1 'Registered tunnel connection' "$log" 2>/dev/null || true)
+    if ! kill -0 "$pid" 2>/dev/null; then
+      wait "$pid" 2>/dev/null || true
+      rm -f "$pid_file"
+      log_error "cloudflared exited before connecting for $compose_name. Check: $log"
+      return 1
+    fi
+    [ -n "$url" ] && [ -n "$connected" ] && break
     sleep 2
   done
 
-  [ -z "$url" ] && { log_error "Failed to create tunnel for $compose_name. Check: $log"; return 1; }
+  if [ -z "$url" ] || [ -z "$connected" ]; then
+    kill "$pid" 2>/dev/null || true
+    rm -f "$pid_file"
+    log_error "Failed to establish tunnel for $compose_name. Check: $log"
+    return 1
+  fi
 
   mkdir -p state .local-state
-  grep -v "^${key}_URL=" "$STATE_FILE" 2>/dev/null > "${STATE_FILE}.tmp" || true
-  echo "${key}_URL=${url}" >> "${STATE_FILE}.tmp"
-  mv "${STATE_FILE}.tmp" "$STATE_FILE"
+  grep -v "^${key}_URL=" "$STATE_FILE" 2>/dev/null > "${STATE_FILE}.tmp.$$" || true
+  echo "${key}_URL=${url}" >> "${STATE_FILE}.tmp.$$"
+  mv "${STATE_FILE}.tmp.$$" "$STATE_FILE"
 
   if [ "$compose_name" = "n8n" ]; then
     [ "$OUTPUT_FORMAT" != "json" ] && echo "Updating n8n webhook URL in .env..."
@@ -61,20 +106,33 @@ _tunnel_start_one() {
     else
       echo "N8N_WEBHOOK_URL=${url}/" >> .env
     fi
-    $DOCKER_CMD compose up -d n8n
+    if ! $DOCKER_CMD compose up -d n8n || ! _tunnel_wait_for_origin "$scheme" "$port"; then
+      _tunnel_stop_one "$compose_name" quiet
+      log_error "Failed to apply n8n webhook URL"
+      return 1
+    fi
   fi
 
-  echo "$compose_name: $url"
+  [ "$OUTPUT_FORMAT" = "json" ] || echo "$compose_name: $url"
 }
 
 _tunnel_stop_one() {
-  local compose_name="$1"
-  local port scheme
+  local compose_name="$1" quiet="${2:-}"
+  local port scheme pid_file pid
   port=$(registry_port "$compose_name" 2>/dev/null) || return 0
   scheme=$(registry_scheme "$compose_name" 2>/dev/null)
-  pkill -f "cloudflared tunnel --url ${scheme}://localhost:${port}" 2>/dev/null || true
-  pkill -f "cloudflared tunnel --url ${scheme}://127.0.0.1:${port}" 2>/dev/null || true
-  [ "$OUTPUT_FORMAT" != "json" ] && echo "Stopped tunnel: $compose_name"
+  pid_file=$(_tunnel_pid_file "$compose_name")
+  if [ -s "$pid_file" ]; then
+    read -r pid < "$pid_file"
+    _tunnel_pid_running "$compose_name" && kill "$pid" 2>/dev/null || true
+  else
+    # Compatibility cleanup for tunnels started by older releases.
+    pkill -f "cloudflared tunnel --url ${scheme}://localhost:${port}" 2>/dev/null || true
+    pkill -f "cloudflared tunnel --url ${scheme}://127.0.0.1:${port}" 2>/dev/null || true
+  fi
+  rm -f "$pid_file"
+  _tunnel_remove_state "$compose_name"
+  [ "$quiet" = "quiet" ] || [ "$OUTPUT_FORMAT" = "json" ] || echo "Stopped tunnel: $compose_name"
 }
 
 _tunnel_show_status() {
@@ -89,6 +147,10 @@ _tunnel_show_status() {
 }
 
 _tunnel_show_urls() {
+  local svc
+  for svc in $(tunnelable); do
+    _tunnel_pid_running "$svc" || _tunnel_remove_state "$svc"
+  done
   if [ "$OUTPUT_FORMAT" = "json" ]; then
     if [ -f "$STATE_FILE" ]; then
       local first=1 key val
@@ -116,7 +178,10 @@ _tunnel_show_urls() {
 _tunnel_resolve_target() {
   local input="$1"
   if resolve_alias "$input" >/dev/null 2>&1; then
-    echo "service:$(resolve_alias "$input")"
+    local service
+    service=$(resolve_alias "$input")
+    [ "$(registry_tunnel "$service")" = "yes" ] || return 1
+    echo "service:$service"
     return 0
   fi
   case "$input" in
@@ -173,18 +238,23 @@ EOF
     start)
       if [ "$kind" = "group" ] && [ "$name" = "all" ]; then
         local svc
-        for svc in $(tunnelable); do _tunnel_start_one "$svc"; done
+        local failed=0
+        for svc in $(tunnelable); do _tunnel_start_one "$svc" || failed=1; done
       elif [ "$kind" = "group" ]; then
         local svc
-        for svc in $(tunnel_group_services "$name"); do _tunnel_start_one "$svc"; done
+        local failed=0
+        for svc in $(tunnel_group_services "$name"); do _tunnel_start_one "$svc" || failed=1; done
       else
-        _tunnel_start_one "$name"
+        local failed=0
+        _tunnel_start_one "$name" || failed=1
       fi
       _tunnel_show_urls
+      [ "$failed" -eq 0 ]
       ;;
     stop)
       if [ "$kind" = "group" ] && [ "$name" = "all" ]; then
-        pkill -f 'cloudflared tunnel --url' 2>/dev/null || true
+        local svc
+        for svc in $(tunnelable); do _tunnel_stop_one "$svc" quiet; done
         [ "$OUTPUT_FORMAT" != "json" ] && echo "Stopped all quick tunnels."
       elif [ "$kind" = "group" ]; then
         local svc
@@ -195,17 +265,19 @@ EOF
       ;;
     restart)
       if [ "$kind" = "group" ] && [ "$name" = "all" ]; then
-        pkill -f 'cloudflared tunnel --url' 2>/dev/null || true
-        local svc
-        for svc in $(tunnelable); do _tunnel_start_one "$svc"; done
+        local svc failed=0
+        for svc in $(tunnelable); do _tunnel_stop_one "$svc" quiet; done
+        for svc in $(tunnelable); do _tunnel_start_one "$svc" || failed=1; done
       elif [ "$kind" = "group" ]; then
-        local svc
-        for svc in $(tunnel_group_services "$name"); do _tunnel_stop_one "$svc"; _tunnel_start_one "$svc"; done
+        local svc failed=0
+        for svc in $(tunnel_group_services "$name"); do _tunnel_stop_one "$svc"; _tunnel_start_one "$svc" || failed=1; done
       else
+        local failed=0
         _tunnel_stop_one "$name"
-        _tunnel_start_one "$name"
+        _tunnel_start_one "$name" || failed=1
       fi
       _tunnel_show_urls
+      [ "$failed" -eq 0 ]
       ;;
     *) log_error "Unknown tunnel action: $action"; return 1 ;;
   esac

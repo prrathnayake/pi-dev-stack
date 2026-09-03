@@ -13,6 +13,12 @@ docker-compose.override.yml
 *.log
 
 # Python / TUI
+.venv/
 tui/.venv/
 __pycache__/
+.pytest_cache/
 *.pyc
+
+# MCP server build and dependencies
+mcp-server/dist/
+mcp-server/node_modules/
