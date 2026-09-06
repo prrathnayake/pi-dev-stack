@@ -8,6 +8,8 @@ from typer.testing import CliRunner
 
 from homelab_cli.__main__ import _legacy_message
 from homelab_cli.app import app
+from homelab_cli.context import AppState
+from homelab_cli.guided import run_guided
 from homelab_cli.runner import RunResult
 
 
@@ -29,6 +31,18 @@ def test_help_and_all_command_groups_are_discoverable() -> None:
     assert result.exit_code == 0
     for command in ("overview", "setup", "stack", "service", "tunnel", "backup", "config", "system", "pihole", "update", "data", "completion"):
         assert command in result.stdout
+
+
+def test_guided_menu_passes_string_choices_to_rich(monkeypatch) -> None:
+    received: dict[str, object] = {}
+
+    def ask(*args, **kwargs):
+        received.update(kwargs)
+        return 7
+
+    monkeypatch.setattr("homelab_cli.guided.IntPrompt.ask", ask)
+    run_guided(AppState(root=ROOT))
+    assert received["choices"] == ["1", "2", "3", "4", "5", "6", "7"]
 
 
 def test_service_list_json_is_one_valid_document(tmp_path: Path, monkeypatch) -> None:

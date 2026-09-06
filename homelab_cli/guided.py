@@ -23,7 +23,7 @@ def run_guided(state: AppState) -> None:
         state.console.print("\n[bold cyan]Pi Dev Stack[/] guided administration")
         for number, (label, _) in choices.items():
             state.console.print(f"  {number}. {label}")
-        selected = IntPrompt.ask("Choose", choices=list(choices), default=1)
+        selected = IntPrompt.ask("Choose", choices=[str(number) for number in choices], default=1)
         if selected == 7:
             return
         command = choices[selected][1]
