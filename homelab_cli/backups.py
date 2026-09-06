@@ -61,6 +61,23 @@ def validate_archive(path: Path) -> list[str]:
     return errors
 
 
+def _add_to_archive(archive: tarfile.TarFile, source: Path, arcname: str) -> None:
+    if source.is_symlink():
+        return
+    if source.is_file():
+        try:
+            archive.add(source, arcname=arcname)
+        except (PermissionError, OSError):
+            pass
+    elif source.is_dir():
+        try:
+            children = sorted(source.iterdir())
+        except (PermissionError, OSError):
+            return
+        for child in children:
+            _add_to_archive(archive, child, str(PurePosixPath(arcname) / child.name))
+
+
 def create_backup(root: Path, *, include_media: bool = False) -> Path:
     sources = _archive_sources(root, include_media)
     destination = root / "backups"
@@ -71,7 +88,7 @@ def create_backup(root: Path, *, include_media: bool = False) -> Path:
     try:
         with tarfile.open(temporary, "w:gz") as archive:
             for source in sources:
-                archive.add(source, arcname=source.relative_to(root), recursive=True)
+                _add_to_archive(archive, source, source.relative_to(root).as_posix())
         errors = validate_archive(temporary)
         if errors:
             raise BackupError("; ".join(errors))

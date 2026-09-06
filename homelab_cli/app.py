@@ -326,9 +326,12 @@ def _service_action(state: AppState, action: str, names: list[str]) -> None:
     if not names:
         state.fail(f"service {action}", "At least one service is required.", EXIT_USAGE)
     services = _services(state, names, f"service {action}")
-    args = [*_compose_for(state, services), action, *[item.name for item in services]]
     if action == "start":
         args = [*_compose_for(state, services), "up", "-d", *[item.name for item in services]]
+    elif action == "status":
+        args = [*_compose_for(state, services), "ps", *[item.name for item in services]]
+    else:
+        args = [*_compose_for(state, services), action, *[item.name for item in services]]
     result = _execute(state, f"service {action}", args, mutate=action != "status", timeout=180)
     _emit_result(state, f"service {action}", result, f"Service {action} completed: {', '.join(names)}")
 

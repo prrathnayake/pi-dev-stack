@@ -78,6 +78,17 @@ def test_docker_failure_is_not_reported_as_success(tmp_path: Path, monkeypatch) 
     assert json.loads(result.stdout)["ok"] is False
 
 
+def test_service_status_uses_compose_ps(tmp_path: Path, monkeypatch) -> None:
+    _project(tmp_path, monkeypatch)
+    monkeypatch.setattr("homelab_cli.app.compose_command", lambda state, extras=False: ["docker", "compose"])
+    monkeypatch.setattr("homelab_cli.app.Runner.run", lambda self, args, **kwargs: RunResult(list(args), 0, stdout="ok"))
+    result = runner.invoke(app, ["--json", "service", "status", "n8n"])
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert "ps" in payload["data"]["args"]
+
+
 def test_legacy_commands_get_migration_messages(monkeypatch) -> None:
     monkeypatch.setenv("PI_DEV_STACK_ROOT", str(ROOT))
     assert "stack start" in (_legacy_message(["up"]) or "")
